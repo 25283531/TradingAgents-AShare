@@ -275,10 +275,10 @@ export default function TradePanel({ onTradeComplete, trackingItems }: TradePane
                                             {formatMoney(trade.amount)}
                                         </td>
                                         <td className="py-3 px-3 text-right">
-                                            {trade.trade_type === 'sell' && trade.pnl != null ? (
+                                            {trade.trade_type === 'sell' && trade.pnl != null && trade.pnl_pct != null ? (
                                                 <div className={`font-medium ${trade.pnl >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                     {trade.pnl >= 0 ? '+' : ''}{formatMoney(trade.pnl)}
-                                                    <span className="ml-1 text-xs">({trade.pnl_pct >= 0 ? '+' : ''}{trade.pnl_pct?.toFixed(2)}%)</span>
+                                                    <span className="ml-1 text-xs">({trade.pnl_pct >= 0 ? '+' : ''}{trade.pnl_pct.toFixed(2)}%)</span>
                                                 </div>
                                             ) : (
                                                 <span className="text-slate-400">-</span>

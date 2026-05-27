@@ -6,7 +6,6 @@ import {
     ImagePlus,
     Loader2,
     RefreshCw,
-    Save,
     ShieldAlert,
     Target,
     Trash2,
@@ -49,7 +48,6 @@ export default function TrackingBoardPanel() {
     })
     const [showImportSection, setShowImportSection] = useState(false)
     const [positionText, setPositionText] = useState('')
-    const [importSaving, setImportSaving] = useState(false)
     const [importClearing, setImportClearing] = useState(false)
     const [importFeedback, setImportFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
     const [vlmParsing, setVlmParsing] = useState(false)
@@ -146,27 +144,6 @@ export default function TrackingBoardPanel() {
         }
         return positions
     }, [])
-
-    const handleSavePositions = useCallback(async () => {
-        const positions = parsePositionLines(positionText)
-        if (positions.length === 0) {
-            setImportFeedback({ tone: 'error', message: '未解析到有效持仓，请检查格式' })
-            return
-        }
-        setImportSaving(true)
-        setImportFeedback(null)
-        try {
-            await api.syncPortfolioImport({ positions, auto_apply_scheduled: true })
-            setImportFeedback({ tone: 'success', message: `已保存 ${positions.length} 只持仓` })
-            setPositionText('')
-            setShowImportSection(false)
-            await refreshBoard()
-        } catch (e) {
-            setImportFeedback({ tone: 'error', message: e instanceof Error ? e.message : '保存失败' })
-        } finally {
-            setImportSaving(false)
-        }
-    }, [positionText, parsePositionLines, refreshBoard])
 
     const handleSavePositionsFromForm = useCallback(async (positions: PortfolioPositionInput[]) => {
         if (positions.length === 0) {

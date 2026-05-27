@@ -17,6 +17,8 @@ import {
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import TradePanel from './TradePanel'
+import PositionImportForm from './PositionImportForm'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import type { PortfolioPositionInput, TrackingBoardItem, TrackingBoardResponse } from '@/types'
@@ -166,6 +168,24 @@ export default function TrackingBoardPanel() {
         }
     }, [positionText, parsePositionLines, refreshBoard])
 
+    const handleSavePositionsFromForm = useCallback(async (positions: PortfolioPositionInput[]) => {
+        if (positions.length === 0) {
+            setImportFeedback({ tone: 'error', message: '未解析到有效持仓，请检查格式' })
+            return
+        }
+        setImportSaving(true)
+        setImportFeedback(null)
+        try {
+            await api.syncPortfolioImport({ positions, auto_apply_scheduled: true })
+            setImportFeedback({ tone: 'success', message: `已保存 ${positions.length} 只持仓` })
+            await refreshBoard()
+        } catch (e) {
+            setImportFeedback({ tone: 'error', message: e instanceof Error ? e.message : '保存失败' })
+        } finally {
+            setImportSaving(false)
+        }
+    }, [refreshBoard])
+
     const handleClearPositions = useCallback(async () => {
         if (!confirm('确定清空所有已导入的持仓吗？')) return
         setImportClearing(true)
@@ -250,25 +270,13 @@ export default function TrackingBoardPanel() {
                 </button>
 
                 {showImportSection && (
-                    <div className="space-y-3 pb-4">
-                        <textarea
-                            value={positionText}
-                            onChange={e => setPositionText(e.target.value)}
-                            placeholder={'每行一只股票，格式：代码 名称 持仓数 成本价 市值\n例如：600519 贵州茅台 100 1800 180000'}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500 min-h-[100px] resize-y"
+                    <div className="space-y-4 pb-4">
+                        <PositionImportForm
+                            onSave={handleSavePositionsFromForm}
+                            onCancel={() => setShowImportSection(false)}
                         />
 
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={handleSavePositions}
-                                disabled={importSaving || !positionText.trim()}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                {importSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                保存持仓
-                            </button>
-
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
@@ -323,23 +331,31 @@ export default function TrackingBoardPanel() {
                         在上方导入持仓后，这里会自动出现实时跟踪卡片。
                     </p>
                 </div>
-            ) : viewMode === 'simple' ? (
-                <SimpleBoardView
-                    items={trackingItems}
-                    trackingRefreshing={trackingRefreshing}
-                    trackingError={trackingError}
-                    lastQuoteTime={lastQuoteTime}
-                />
             ) : (
-                <DetailedBoardView
-                    items={trackingItems}
-                    trackingRefreshing={trackingRefreshing}
-                    trackingError={trackingError}
-                    liveMarketValueTotal={liveMarketValueTotal}
-                    floatingPnlTotal={floatingPnlTotal}
-                    onAnalyze={symbol => navigate(`/analysis?symbol=${symbol}`)}
-                    onOpenReport={reportId => navigate(`/reports?report=${reportId}`)}
-                />
+                <>
+                    <TradePanel onTradeComplete={refreshBoard} trackingItems={trackingItems} />
+                </>
+            )}
+
+            {!trackingLoading && trackingBoard && trackingItems.length > 0 && (
+                viewMode === 'simple' ? (
+                    <SimpleBoardView
+                        items={trackingItems}
+                        trackingRefreshing={trackingRefreshing}
+                        trackingError={trackingError}
+                        lastQuoteTime={lastQuoteTime}
+                    />
+                ) : (
+                    <DetailedBoardView
+                        items={trackingItems}
+                        trackingRefreshing={trackingRefreshing}
+                        trackingError={trackingError}
+                        liveMarketValueTotal={liveMarketValueTotal}
+                        floatingPnlTotal={floatingPnlTotal}
+                        onAnalyze={symbol => navigate(`/analysis?symbol=${symbol}`)}
+                        onOpenReport={reportId => navigate(`/reports?report=${reportId}`)}
+                    />
+                )
             )}
         </div>
     )

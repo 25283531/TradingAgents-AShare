@@ -41,7 +41,7 @@ import pandas as pd
 
 from api.database import UserDB, UserLLMConfigDB, VersionStatsDB, ReportDB, ImportedPortfolioPositionDB, FeedbackDB, SponsorDB, init_db, get_db, get_db_ctx
 from api.job_store import get_job_store as _new_job_store
-from api.services import auth_service, portfolio_import_service, report_service, token_service, watchlist_service, scheduled_service, tracking_board_service, feedback_service, sponsor_service
+from api.services import auth_service, portfolio_import_service, report_service, token_service, watchlist_service, scheduled_service, tracking_board_service, feedback_service, sponsor_service, trade_service
 
 def _get_real_ip(request: Request) -> Optional[str]:
     """Extract real client IP, preferring Cloudflare/proxy headers."""
@@ -4125,6 +4125,166 @@ def clear_portfolio_import_state(
     db: Session = Depends(get_db),
 ):
     portfolio_import_service.clear_imported_portfolio(db, current_user.id)
+
+
+# ---------------------------------------------------------------------------
+# Trade Record APIs
+# ---------------------------------------------------------------------------
+
+class TradeBuyRequest(BaseModel):
+    symbol: str = Field(..., description="股票代码，如 600519.SH")
+    name: Optional[str] = Field(None, description="股票名称")
+    quantity: float = Field(..., description="买入数量", gt=0)
+    price: float = Field(..., description="买入价格", gt=0)
+    fee: Optional[float] = Field(0.0, description="交易费用")
+    tax: Optional[float] = Field(0.0, description="税费")
+    notes: Optional[str] = Field(None, description="备注")
+
+
+class TradeSellRequest(BaseModel):
+    symbol: str = Field(..., description="股票代码，如 600519.SH")
+    quantity: float = Field(..., description="卖出数量", gt=0)
+    price: float = Field(..., description="卖出价格", gt=0)
+    fee: Optional[float] = Field(0.0, description="交易费用")
+    tax: Optional[float] = Field(0.0, description="税费")
+    notes: Optional[str] = Field(None, description="备注")
+
+
+class TradeRecordResponse(BaseModel):
+    id: str
+    symbol: str
+    security_name: Optional[str]
+    trade_type: str
+    trade_date: str
+    trade_time: str
+    quantity: float
+    price: float
+    amount: float
+    fee: float
+    tax: float
+    position_before: float
+    position_after: float
+    average_cost_before: Optional[float]
+    average_cost_after: Optional[float]
+    pnl: Optional[float]
+    pnl_pct: Optional[float]
+    notes: Optional[str]
+    created_at: Optional[str]
+
+
+class TradeSummaryResponse(BaseModel):
+    total_trades: int
+    buy_trades: int
+    sell_trades: int
+    total_buy_amount: float
+    total_sell_amount: float
+    total_fee: float
+    total_tax: float
+    realized_pnl: float
+
+
+class PortfolioSummaryResponse(BaseModel):
+    num_symbols: int
+    total_cost_basis: float
+    total_market_value: float
+    total_position: float
+    total_invested: float
+    realized_pnl: float
+    unrealized_pnl: float
+
+
+@app.post("/v1/trades/buy", response_model=TradeRecordResponse)
+def record_trade_buy(
+    body: TradeBuyRequest,
+    current_user: UserDB = Depends(_require_api_user),
+    db: Session = Depends(get_db),
+):
+    """记录买入交易"""
+    try:
+        return trade_service.record_buy(
+            db=db,
+            user_id=current_user.id,
+            symbol=body.symbol,
+            security_name=body.name,
+            quantity=body.quantity,
+            price=body.price,
+            fee=body.fee or 0.0,
+            tax=body.tax or 0.0,
+            notes=body.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/v1/trades/sell", response_model=TradeRecordResponse)
+def record_trade_sell(
+    body: TradeSellRequest,
+    current_user: UserDB = Depends(_require_api_user),
+    db: Session = Depends(get_db),
+):
+    """记录卖出交易"""
+    try:
+        return trade_service.record_sell(
+            db=db,
+            user_id=current_user.id,
+            symbol=body.symbol,
+            quantity=body.quantity,
+            price=body.price,
+            fee=body.fee or 0.0,
+            tax=body.tax or 0.0,
+            notes=body.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/v1/trades", response_model=List[TradeRecordResponse])
+def get_trade_history(
+    symbol: Optional[str] = Query(None, description="按股票代码筛选"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user: UserDB = Depends(_require_api_user),
+    db: Session = Depends(get_db),
+):
+    """获取交易历史记录"""
+    return trade_service.get_trade_history(
+        db=db,
+        user_id=current_user.id,
+        symbol=symbol,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/v1/trades/summary", response_model=TradeSummaryResponse)
+def get_trade_summary(
+    current_user: UserDB = Depends(_require_api_user),
+    db: Session = Depends(get_db),
+):
+    """获取交易统计摘要"""
+    return trade_service.get_trade_summary(db=db, user_id=current_user.id)
+
+
+@app.get("/v1/portfolio/summary", response_model=PortfolioSummaryResponse)
+def get_portfolio_summary(
+    current_user: UserDB = Depends(_require_api_user),
+    db: Session = Depends(get_db),
+):
+    """获取持仓组合摘要（成本、市值、盈亏统计）"""
+    return trade_service.get_portfolio_summary(db=db, user_id=current_user.id)
+
+
+@app.delete("/v1/trades/{trade_id}")
+def delete_trade(
+    trade_id: str,
+    current_user: UserDB = Depends(_require_api_user),
+    db: Session = Depends(get_db),
+):
+    """删除交易记录（不回滚持仓）"""
+    success = trade_service.delete_trade(db=db, user_id=current_user.id, trade_id=trade_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="交易记录不存在")
+    return {"message": "删除成功"}
 
 
 @app.post("/v1/portfolio/parse-image")

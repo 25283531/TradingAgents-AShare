@@ -1,4 +1,4 @@
-import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, JobListResponse, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse } from '@/types'
+import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, JobListResponse, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse, TradeBuyRequest, TradeSellRequest, TradeRecord, TradeSummaryResponse, PortfolioSummaryResponse } from '@/types'
 
 export function getBaseUrl(): string {
     const envUrl = (import.meta.env.VITE_API_URL as string) || ''
@@ -359,6 +359,43 @@ class ApiService {
 
     async markFeedbackRead(id: string): Promise<void> {
         return this.request<void>(`/v1/feedbacks/${id}/read`, { method: 'POST' })
+    }
+
+    // Trade API Methods
+    async recordTradeBuy(request: TradeBuyRequest): Promise<TradeRecord> {
+        return this.request<TradeRecord>('/v1/trades/buy', {
+            method: 'POST',
+            body: JSON.stringify(request),
+        })
+    }
+
+    async recordTradeSell(request: TradeSellRequest): Promise<TradeRecord> {
+        return this.request<TradeRecord>('/v1/trades/sell', {
+            method: 'POST',
+            body: JSON.stringify(request),
+        })
+    }
+
+    async getTradeHistory(symbol?: string, limit = 100, offset = 0): Promise<TradeRecord[]> {
+        const params = new URLSearchParams()
+        if (symbol) params.append('symbol', symbol)
+        params.append('limit', limit.toString())
+        params.append('offset', offset.toString())
+        return this.request<TradeRecord[]>(`/v1/trades?${params}`)
+    }
+
+    async getTradeSummary(): Promise<TradeSummaryResponse> {
+        return this.request<TradeSummaryResponse>('/v1/trades/summary')
+    }
+
+    async getPortfolioSummary(): Promise<PortfolioSummaryResponse> {
+        return this.request<PortfolioSummaryResponse>('/v1/portfolio/summary')
+    }
+
+    async deleteTrade(tradeId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/v1/trades/${tradeId}`, {
+            method: 'DELETE',
+        })
     }
 }
 

@@ -489,3 +489,36 @@ class ImportedPortfolioPositionDB(Base):
     )
 
 
+class TradeRecordDB(Base):
+    """Individual trade records (buy/sell) for tracking transaction history."""
+
+    __tablename__ = "trade_records"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(64), index=True, nullable=False)
+    symbol = Column(String(20), nullable=False, index=True)
+    security_name = Column(String(80), nullable=True)
+    trade_type = Column(String(8), nullable=False)  # 'buy' or 'sell'
+    trade_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    trade_time = Column(String(8), nullable=False)  # HH:MM:SS
+    quantity = Column(Float, nullable=False)  # Positive number
+    price = Column(Float, nullable=False)  # Trade price per share
+    amount = Column(Float, nullable=False)  # quantity * price
+    fee = Column(Float, default=0.0)  # Transaction fee
+    tax = Column(Float, default=0.0)  # Tax amount
+    position_before = Column(Float, nullable=False)  # Position before trade
+    position_after = Column(Float, nullable=False)  # Position after trade
+    average_cost_before = Column(Float)  # Average cost before trade
+    average_cost_after = Column(Float)  # Average cost after trade
+    pnl = Column(Float)  # P&L for this trade (only for sell)
+    pnl_pct = Column(Float)  # P&L percentage for this trade (only for sell)
+    notes = Column(String(500), nullable=True)  # Optional notes
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index('ix_trade_records_user_symbol', 'user_id', 'symbol'),
+        Index('ix_trade_records_user_date', 'user_id', 'trade_date'),
+    )
+
+

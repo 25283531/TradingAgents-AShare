@@ -506,6 +506,69 @@ export interface PortfolioPositionInput {
     current_position_pct?: number | null
 }
 
+// Trade Record Types
+export interface TradeBuyRequest {
+    symbol: string
+    name?: string
+    quantity: number
+    price: number
+    fee?: number
+    tax?: number
+    notes?: string
+}
+
+export interface TradeSellRequest {
+    symbol: string
+    quantity: number
+    price: number
+    fee?: number
+    tax?: number
+    notes?: string
+}
+
+export interface TradeRecord {
+    id: string
+    symbol: string
+    security_name?: string
+    trade_type: 'buy' | 'sell'
+    trade_date: string
+    trade_time: string
+    quantity: number
+    price: number
+    amount: number
+    fee: number
+    tax: number
+    position_before: number
+    position_after: number
+    average_cost_before?: number
+    average_cost_after?: number
+    pnl?: number
+    pnl_pct?: number
+    notes?: string
+    created_at?: string
+}
+
+export interface TradeSummaryResponse {
+    total_trades: number
+    buy_trades: number
+    sell_trades: number
+    total_buy_amount: number
+    total_sell_amount: number
+    total_fee: number
+    total_tax: number
+    realized_pnl: number
+}
+
+export interface PortfolioSummaryResponse {
+    num_symbols: number
+    total_cost_basis: number
+    total_market_value: number
+    total_position: number
+    total_invested: number
+    realized_pnl: number
+    unrealized_pnl: number
+}
+
 export interface PortfolioOverviewResponse {
     watchlist: WatchlistItem[]
     scheduled: ScheduledAnalysis[]

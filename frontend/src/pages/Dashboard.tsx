@@ -51,7 +51,6 @@ export default function Dashboard() {
         api.getJobs(undefined, 100, 0)
             .then(res => {
                 if (cancelled) return
-                const now = Date.now()
                 const running = res.jobs.filter(j => ['running', 'pending', 'timeout'].includes(j.status))
                 const recent = res.jobs
                     .filter(j => j.status === 'completed' || j.status === 'failed')

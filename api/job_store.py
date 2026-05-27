@@ -65,6 +65,14 @@ class JobStore(Protocol):
         """Reset all state (used on startup)."""
         ...
 
+    def list_jobs(self, user_id: Optional[str] = None, status: Optional[str] = None) -> list[Dict[str, Any]]:
+        """List all jobs, optionally filtered by user_id or status."""
+        ...
+
+    def get_running_jobs(self) -> list[Dict[str, Any]]:
+        """Get all running jobs (status='running' or status='pending')."""
+        ...
+
 
 class InMemoryJobStore:
     """In-process job store using threading.Lock and asyncio.Queue.
@@ -133,6 +141,22 @@ class InMemoryJobStore:
             handle = self._cleanup_handles.pop(job_id, None)
         if handle is not None:
             handle.cancel()
+
+    def list_jobs(self, user_id: Optional[str] = None, status: Optional[str] = None) -> list[Dict[str, Any]]:
+        with self._lock:
+            jobs = []
+            for job_id, job_data in self._jobs.items():
+                if user_id and job_data.get("user_id") != user_id:
+                    continue
+                if status and job_data.get("status") != status:
+                    continue
+                job_dict = dict(job_data)
+                job_dict["job_id"] = job_id
+                jobs.append(job_dict)
+            return jobs
+
+    def get_running_jobs(self) -> list[Dict[str, Any]]:
+        return self.list_jobs(status="running") + self.list_jobs(status="pending") + self.list_jobs(status="timeout")
 
     def _cancel_cleanup(self, job_id: str) -> None:
         with self._lock:

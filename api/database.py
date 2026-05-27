@@ -136,6 +136,12 @@ def _ensure_user_schema() -> None:
                 conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN wecom_webhook_encrypted TEXT"))
             if "default_analysts" not in llm_columns:
                 conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN default_analysts TEXT"))
+            if "job_timeout" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN job_timeout INTEGER DEFAULT 1800"))
+            if "stagger_delay" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN stagger_delay INTEGER DEFAULT 1"))
+            if "batch_concurrency" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN batch_concurrency INTEGER DEFAULT 3"))
     except Exception as e:
         logger.error("Failed to ensure user schema: %s", e)
 
@@ -357,6 +363,9 @@ class UserLLMConfigDB(Base):
     api_key_encrypted = Column(Text, nullable=True)
     wecom_webhook_encrypted = Column(Text, nullable=True)
     default_analysts = Column(Text, nullable=True)  # JSON list, e.g. '["market","social",...]'
+    job_timeout = Column(Integer, default=1800)  # 任务超时时间（秒），默认1800秒（30分钟）
+    stagger_delay = Column(Integer, default=1)  # 批量任务错峰间隔（秒），默认1秒
+    batch_concurrency = Column(Integer, default=3)  # 批量任务并发上限，默认3
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

@@ -1,4 +1,4 @@
-import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse } from '@/types'
+import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, JobListResponse, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse } from '@/types'
 
 export function getBaseUrl(): string {
     const envUrl = (import.meta.env.VITE_API_URL as string) || ''
@@ -135,6 +135,21 @@ class ApiService {
     async deleteReport(reportId: string): Promise<{ message: string }> {
         return this.request<{ message: string }>(`/v1/reports/${reportId}`, {
             method: 'DELETE',
+        })
+    }
+
+    // Job API Methods
+    async getJobs(status?: string, limit = 100, offset = 0): Promise<JobListResponse> {
+        const params = new URLSearchParams()
+        if (status) params.append('status', status)
+        params.append('limit', limit.toString())
+        params.append('offset', offset.toString())
+        return this.request<JobListResponse>(`/v1/jobs?${params}`)
+    }
+
+    async cancelJob(jobId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/v1/jobs/${jobId}/cancel`, {
+            method: 'POST',
         })
     }
 

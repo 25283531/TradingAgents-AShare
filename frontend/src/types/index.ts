@@ -106,7 +106,7 @@ export interface AnalysisResponse {
 
 export interface JobStatus {
     job_id: string
-    status: 'pending' | 'running' | 'completed' | 'failed'
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'timeout'
     created_at: string
     started_at?: string
     finished_at?: string
@@ -116,6 +116,11 @@ export interface JobStatus {
     waiting_ahead_count?: number | null
     scheduled_running_count?: number | null
     scheduled_concurrency_limit?: number | null
+}
+
+export interface JobListResponse {
+    jobs: JobStatus[]
+    total: number
 }
 
 // SSE Event Types
@@ -561,6 +566,9 @@ export interface RuntimeConfig {
     backend_url: string
     max_debate_rounds: number
     max_risk_discuss_rounds: number
+    job_timeout?: number
+    stagger_delay?: number
+    batch_concurrency?: number
     has_api_key?: boolean
     has_wecom_webhook?: boolean
     wecom_webhook_display?: string | null
@@ -585,6 +593,9 @@ export interface RuntimeConfigUpdate {
     backend_url?: string
     max_debate_rounds?: number
     max_risk_discuss_rounds?: number
+    job_timeout?: number
+    stagger_delay?: number
+    batch_concurrency?: number
     api_key?: string
     wecom_webhook_url?: string
     clear_api_key?: boolean

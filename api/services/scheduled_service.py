@@ -313,11 +313,15 @@ def batch_delete_scheduled(db: Session, user_id: str, item_ids: Iterable[str]) -
 
 
 def get_pending_tasks(db: Session, today: str, current_hhmm: str) -> List[ScheduledAnalysisDB]:
-    """Get all active tasks that haven't run today and whose trigger time has passed."""
+    """Get all active tasks that haven't run today and whose trigger time has passed.
+    
+    Excludes tasks that are already running to prevent duplicate execution.
+    """
     all_active = (
         db.query(ScheduledAnalysisDB)
         .filter(
             ScheduledAnalysisDB.is_active == True,
+            ScheduledAnalysisDB.last_run_status != "running",
             (ScheduledAnalysisDB.last_run_date != today) | (ScheduledAnalysisDB.last_run_date == None),
         )
         .all()

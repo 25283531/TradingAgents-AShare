@@ -94,7 +94,7 @@ TradingAgents 模拟真实交易机构的部门协作，将复杂任务拆解为
 ### Docker 一键部署 (推荐)
 
 ```bash
-docker pull ghcr.io/kylinmountain/tradingagents-ashare:latest
+docker pull ghcr.io/25283531/tradingagents-ashare:latest
 
 mkdir -p $(pwd)/data
 export TA_APP_SECRET_KEY=$(openssl rand -base64 32)
@@ -104,7 +104,7 @@ docker run -d -p 8000:8000 \
   -v $(pwd)/data:/app/data \
   -e DATABASE_URL="sqlite:///./data/tradingagents.db" \
   -e TA_APP_SECRET_KEY="${TA_APP_SECRET_KEY}" \
-  ghcr.io/kylinmountain/tradingagents-ashare:latest
+  ghcr.io/25283531/tradingagents-ashare:latest
 ```
 
 访问 `http://localhost:8000` 即可使用。

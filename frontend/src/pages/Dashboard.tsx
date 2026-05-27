@@ -1,11 +1,11 @@
-import { TrendingUp, Activity, FileText, CheckCircle, ArrowRight } from 'lucide-react'
+import { TrendingUp, Activity, FileText, CheckCircle, ArrowRight, XCircle, Clock, ListTodo, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { api } from '@/services/api'
 import { useAnalysisStore } from '@/stores/analysisStore'
 import { useAuthStore } from '@/stores/authStore'
-import type { Report, TrackingBoardResponse } from '@/types'
+import type { JobStatus, Report, TrackingBoardResponse } from '@/types'
 
 export default function Dashboard() {
     const { agents, isAnalyzing } = useAnalysisStore()
@@ -14,6 +14,10 @@ export default function Dashboard() {
     const [recentReports, setRecentReports] = useState<Report[]>([])
     const [trackingBoard, setTrackingBoard] = useState<TrackingBoardResponse | null>(null)
     const [dashboardError, setDashboardError] = useState<string | null>(null)
+    const [runningJobs, setRunningJobs] = useState<JobStatus[]>([])
+    const [recentJobs, setRecentJobs] = useState<JobStatus[]>([])
+    const [jobsLoading, setJobsLoading] = useState(false)
+    const [cancellingJobId, setCancellingJobId] = useState<string | null>(null)
     const navigate = useNavigate()
 
     const completedAgents = agents.filter(a => a.status === 'completed').length
@@ -41,17 +45,45 @@ export default function Dashboard() {
                 if (cancelled) return
                 setTrackingBoard(res)
             })
-            .catch(error => {
+
+        // 获取运行中的任务
+        setJobsLoading(true)
+        api.getJobs(undefined, 100, 0)
+            .then(res => {
                 if (cancelled) return
-                console.error('Failed to load tracking board summary:', error)
-                setTrackingBoard(null)
-                setDashboardError(prev => prev || (error instanceof Error ? error.message : '加载跟踪看板摘要失败'))
+                const now = Date.now()
+                const running = res.jobs.filter(j => ['running', 'pending', 'timeout'].includes(j.status))
+                const recent = res.jobs
+                    .filter(j => j.status === 'completed' || j.status === 'failed')
+                    .slice(0, 5)
+                setRunningJobs(running)
+                setRecentJobs(recent)
+            })
+            .catch(err => {
+                if (cancelled) return
+                console.error('Failed to load jobs:', err)
+            })
+            .finally(() => {
+                if (!cancelled) setJobsLoading(false)
             })
 
         return () => {
             cancelled = true
         }
     }, [user?.id])
+
+    const handleCancelJob = async (jobId: string) => {
+        if (!confirm('确定要取消这个任务吗？')) return
+        setCancellingJobId(jobId)
+        try {
+            await api.cancelJob(jobId)
+            setRunningJobs(prev => prev.filter(j => j.job_id !== jobId))
+        } catch (err) {
+            alert(err instanceof Error ? err.message : '取消任务失败')
+        } finally {
+            setCancellingJobId(null)
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -186,6 +218,113 @@ export default function Dashboard() {
                                 </div>
                             )
                         })}
+                    </div>
+                )}
+            </div>
+
+            {/* 任务管理面板 */}
+            <div className="card">
+                <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <ListTodo className="h-5 w-5 text-slate-500" />
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">任务管理</h2>
+                        {jobsLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                    </div>
+                    {runningJobs.length > 0 && (
+                        <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">
+                            {runningJobs.length} 个任务进行中
+                        </span>
+                    )}
+                </div>
+
+                {/* 运行中/队列中的任务 */}
+                {runningJobs.length > 0 ? (
+                    <div className="mb-4 space-y-2">
+                        <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400">进行中的任务</h3>
+                        {runningJobs.map(job => (
+                            <div
+                                key={job.job_id}
+                                className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                                        job.status === 'running' ? 'bg-blue-100 dark:bg-blue-500/20' :
+                                        job.status === 'timeout' ? 'bg-orange-100 dark:bg-orange-500/20' :
+                                        'bg-slate-100 dark:bg-slate-700'
+                                    }`}>
+                                        {job.status === 'running' ? (
+                                            <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                        ) : job.status === 'timeout' ? (
+                                            <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                        ) : (
+                                            <Clock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-slate-900 dark:text-slate-100">{job.symbol}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            {job.status === 'running' ? '分析中' : job.status === 'timeout' ? '超时等待完成' : '排队中'}
+                                            {' · '}
+                                            {job.created_at ? new Date(job.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => handleCancelJob(job.job_id)}
+                                    disabled={cancellingJobId === job.job_id}
+                                    className="flex items-center gap-1 rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-200 disabled:opacity-50 dark:bg-rose-500/20 dark:text-rose-300 dark:hover:bg-rose-500/30"
+                                >
+                                    {cancellingJobId === job.job_id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <XCircle className="h-3 w-3" />
+                                    )}
+                                    取消
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                ) : !jobsLoading && (
+                    <p className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">
+                        暂无进行中的任务
+                    </p>
+                )}
+
+                {/* 最近的任务结果 */}
+                {recentJobs.length > 0 && (
+                    <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400">最近任务</h3>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                            {recentJobs.map(job => (
+                                <div
+                                    key={job.job_id}
+                                    className="flex cursor-pointer items-center justify-between py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                                    onClick={() => navigate(`/reports?job=${job.job_id}`)}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                                            job.status === 'completed' ? 'bg-green-100 dark:bg-green-500/20' : 'bg-red-100 dark:bg-red-500/20'
+                                        }`}>
+                                            {job.status === 'completed' ? (
+                                                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                            ) : (
+                                                <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-slate-900 dark:text-slate-100">{job.symbol}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                {job.status === 'completed' ? '已完成' : '失败'}
+                                                {job.error && job.status === 'failed' ? ` · ${job.error.slice(0, 20)}` : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                                        {job.finished_at ? new Date(job.finished_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>

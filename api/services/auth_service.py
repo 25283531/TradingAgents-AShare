@@ -255,6 +255,9 @@ def upsert_user_llm_config(
     clear_api_key: bool = False,
     clear_wecom_webhook: bool = False,
     default_analysts: Optional[list] = None,
+    job_timeout: Optional[int] = None,
+    stagger_delay: Optional[int] = None,
+    batch_concurrency: Optional[int] = None,
 ) -> UserLLMConfigDB:
     row = get_user_llm_config(db, user_id)
     now = _utcnow()
@@ -288,6 +291,15 @@ def upsert_user_llm_config(
     if default_analysts is not None:
         import json
         row.default_analysts = json.dumps(default_analysts)
+
+    if job_timeout is not None:
+        row.job_timeout = job_timeout
+
+    if stagger_delay is not None:
+        row.stagger_delay = stagger_delay
+
+    if batch_concurrency is not None:
+        row.batch_concurrency = batch_concurrency
 
     row.updated_at = now
     db.commit()

@@ -160,11 +160,16 @@ async def _run_manual_trigger(
     task: dict,
     requested_trade_date: str,
     job_id: str,
+    *,
+    batch_concurrency: int = 0,
 ) -> None:
-    """Execute a manual-trigger analysis (no scheduler concurrency control).
+    """Execute a manual-trigger analysis.
 
     Used by the /v1/scheduled/{id}/trigger and /v1/scheduled/batch/trigger
     endpoints. Calls _run_job directly then records the test result.
+    
+    When ``batch_concurrency > 0``, acquire a per-user semaphore slot to
+    limit concurrent batch executions (mirrors scheduler's concurrency control).
     """
     task_id = task["id"]
     user_id = task["user_id"]
@@ -175,26 +180,27 @@ async def _run_manual_trigger(
     _log(f"[Manual Trigger] {symbol} trade_date={actual_trade_date} (requested={requested_trade_date})")
 
     try:
-        with get_db_ctx() as db:
-            scheduled_user_context = task.get("manual_user_context") or _build_imported_user_context(
-                db, user_id, symbol
-            )
-            req = _build_scheduled_analyze_request(
-                db=db,
-                user_id=user_id,
-                symbol=symbol,
-                horizon=horizon,
-                trade_date=actual_trade_date,
-                scheduled_user_context=scheduled_user_context,
-            )
+        async with _user_batch_slot(user_id, job_id, symbol, batch_concurrency):
+            with get_db_ctx() as db:
+                scheduled_user_context = task.get("manual_user_context") or _build_imported_user_context(
+                    db, user_id, symbol
+                )
+                req = _build_scheduled_analyze_request(
+                    db=db,
+                    user_id=user_id,
+                    symbol=symbol,
+                    horizon=horizon,
+                    trade_date=actual_trade_date,
+                    scheduled_user_context=scheduled_user_context,
+                )
 
-        await _run_job(job_id, req, False, True, user_id, "scheduled_manual")
-        job_state = _get_job(job_id)
-        if job_state.get("status") == "failed":
-            raise RuntimeError(job_state.get("error") or f"manual trigger job {job_id} failed")
-        with get_db_ctx() as db:
-            scheduled_service.record_manual_test_result(db, task_id, "success", report_id=job_id)
-        _log(f"[Manual Trigger] Completed {symbol}")
+            await _run_job(job_id, req, False, True, user_id, "scheduled_manual", job_timeout=_get_user_job_timeout(user_id))
+            job_state = _get_job(job_id)
+            if job_state.get("status") == "failed":
+                raise RuntimeError(job_state.get("error") or f"manual trigger job {job_id} failed")
+            with get_db_ctx() as db:
+                scheduled_service.record_manual_test_result(db, task_id, "success", report_id=job_id)
+            _log(f"[Manual Trigger] Completed {symbol}")
     except Exception as e:
         logger.error(f"[Manual Trigger] Failed {symbol}: {e}\n{traceback.format_exc()}")
         with get_db_ctx() as db:
@@ -335,6 +341,84 @@ def _utcnow_iso() -> str:
 
 
 _JOB_TIMEOUT = int(os.getenv("TA_JOB_TIMEOUT", "1800"))  # seconds (默认 30 分钟，适配多 Agent 长流程分析)
+
+
+def _get_user_job_timeout(user_id: Optional[str]) -> int:
+    """Get user's configured job timeout, falling back to default."""
+    if not user_id:
+        return _JOB_TIMEOUT
+    try:
+        with get_db_ctx() as db:
+            config = auth_service.get_user_llm_config(db, user_id)
+            if config and config.job_timeout:
+                return config.job_timeout
+    except Exception:
+        pass
+    return _JOB_TIMEOUT
+
+
+def _get_user_batch_settings(user_id: Optional[str]) -> tuple[int, int]:
+    """Get user's batch processing settings (stagger_delay, batch_concurrency).
+    
+    Returns (stagger_delay, batch_concurrency) tuple.
+    Fallback to env vars then sensible defaults.
+    """
+    default_stagger = int(os.getenv("SCHEDULER_STAGGER_DELAY", "1"))
+    default_concurrency = int(os.getenv("SCHEDULER_CONCURRENCY", "3"))
+    if not user_id:
+        return default_stagger, default_concurrency
+    try:
+        with get_db_ctx() as db:
+            config = auth_service.get_user_llm_config(db, user_id)
+            if config:
+                stagger = config.stagger_delay if config.stagger_delay is not None else default_stagger
+                concurrency = config.batch_concurrency if config.batch_concurrency is not None else default_concurrency
+                return stagger, concurrency
+    except Exception:
+        pass
+    return default_stagger, default_concurrency
+
+
+# ── User-level batch concurrency semaphores ──────────────────────────────────
+_user_batch_semaphores: Dict[str, asyncio.Semaphore] = {}
+_user_batch_concurrency: Dict[str, int] = {}
+_user_batch_semaphores_lock = Lock()
+
+
+def _get_user_batch_semaphore(user_id: str, concurrency: int) -> asyncio.Semaphore:
+    """Get or create per-user semaphore for batch task concurrency control.
+    
+    When concurrency changes, recreate the semaphore. Existing waiters on
+    the old semaphore will still work normally (they'll just use stale limit).
+    """
+    with _user_batch_semaphores_lock:
+        cached_concurrency = _user_batch_concurrency.get(user_id)
+        sem = _user_batch_semaphores.get(user_id)
+        if sem is None or cached_concurrency != concurrency:
+            sem = asyncio.Semaphore(max(1, concurrency))
+            _user_batch_semaphores[user_id] = sem
+            _user_batch_concurrency[user_id] = concurrency
+        return sem
+
+
+@asynccontextmanager
+async def _user_batch_slot(user_id: str, job_id: str, symbol: str, concurrency: int):
+    """Acquire/release a per-user batch concurrency slot."""
+    if concurrency <= 0:
+        # 0 = unlimited
+        yield
+        return
+    sem = _get_user_batch_semaphore(user_id, concurrency)
+    _log(f"[Batch] Waiting for slot user={user_id} job={job_id} symbol={symbol}")
+    await sem.acquire()
+    try:
+        _log(f"[Batch] Acquired slot user={user_id} job={job_id} symbol={symbol}")
+        yield
+    finally:
+        sem.release()
+        _log(f"[Batch] Released slot user={user_id} job={job_id} symbol={symbol}")
+
+
 def _create_tracked_task(coro, *, label: str = "Background task") -> asyncio.Task:
     """Create an asyncio task and keep a reference to prevent GC.
     Also logs unhandled exceptions via a done callback."""
@@ -623,7 +707,7 @@ class BatchScheduledTriggerResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str
-    status: Literal["pending", "running", "completed", "failed"]
+    status: Literal["pending", "running", "completed", "failed", "timeout"]
     created_at: str
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
@@ -633,6 +717,11 @@ class JobStatusResponse(BaseModel):
     waiting_ahead_count: Optional[int] = None
     scheduled_running_count: Optional[int] = None
     scheduled_concurrency_limit: Optional[int] = None
+
+
+class JobListResponse(BaseModel):
+    jobs: list[JobStatusResponse]
+    total: int
 
 
 class ChatMessage(BaseModel):
@@ -811,6 +900,9 @@ class UserRuntimeConfigResponse(BaseModel):
     backend_url: str
     max_debate_rounds: int
     max_risk_discuss_rounds: int
+    job_timeout: int = 1800
+    stagger_delay: int = 1
+    batch_concurrency: int = 3
     has_api_key: bool = False
     has_wecom_webhook: bool = False
     wecom_webhook_display: Optional[str] = None
@@ -827,6 +919,9 @@ class UserRuntimeConfigUpdateRequest(BaseModel):
     backend_url: Optional[str] = None
     max_debate_rounds: Optional[int] = None
     max_risk_discuss_rounds: Optional[int] = None
+    job_timeout: Optional[int] = None
+    stagger_delay: Optional[int] = None
+    batch_concurrency: Optional[int] = None
     email_report_enabled: Optional[bool] = None
     wecom_report_enabled: Optional[bool] = None
     api_key: Optional[str] = None
@@ -940,6 +1035,9 @@ def _user_config_overrides(user_id: Optional[str], db: Optional[Session] = None)
             "deep_think_llm",
             "max_debate_rounds",
             "max_risk_discuss_rounds",
+            "job_timeout",
+            "stagger_delay",
+            "batch_concurrency",
         ):
             value = getattr(user_cfg, key, None)
             if value is not None:
@@ -1543,30 +1641,52 @@ async def _run_job(
     save_report: bool = True,
     user_id: Optional[str] = None,
     request_source: str = "api",
+    job_timeout: Optional[int] = None,
 ) -> None:
-    # 用 asyncio.Task + sleep 竞速代替 wait_for，避免 cancel 卡在 to_thread 导致
-    # semaphore 永远不释放的问题。超时后标记失败但不 cancel 内部协程（让线程自然结束）。
+    effective_timeout = job_timeout if job_timeout is not None else _JOB_TIMEOUT
     inner_task = asyncio.create_task(
         _run_job_inner(job_id, request, stream_events, save_report, user_id, request_source)
     )
-    done, _ = await asyncio.wait({inner_task}, timeout=_JOB_TIMEOUT)
+    done, _ = await asyncio.wait({inner_task}, timeout=effective_timeout)
     if inner_task in done:
-        # 正常完成（可能成功也可能异常）
         if not inner_task.cancelled() and inner_task.exception():
             _log(f"[Job {job_id}] failed: {inner_task.exception()}")
         return
-    # 超时：标记失败，但不 cancel 内部 task（避免 cancel 卡住）
-    err_msg = f"任务超时（超过 {_JOB_TIMEOUT} 秒），已自动终止"
+    
+    err_msg = f"任务超时（超过 {effective_timeout} 秒），已自动终止"
     _log(f"[Job {job_id}] {err_msg}")
-    _set_job(job_id, status="failed", error=err_msg, finished_at=_utcnow_iso())
-    # 注意：不能用 asyncio.to_thread 写 DB，因为线程池可能被僵尸任务占满导致死锁。
-    # 用同步方式直接写，SQLite 的写入足够快不会阻塞事件循环。
+    
+    # 标记任务为超时状态，但不要标记为失败，等待内部任务完成
+    _set_job(job_id, status="timeout", error=err_msg, finished_at=_utcnow_iso())
+    
+    # 等待内部任务完成（最多再等5分钟），确保结果被保存
     try:
-        with get_db_ctx() as db:
-            report_service.mark_report_failed(db, job_id, err_msg)
+        done, _ = await asyncio.wait({inner_task}, timeout=300)
+        if inner_task in done:
+            # 内部任务完成了，检查是否有结果
+            job_state = _get_job(job_id)
+            if job_state.get("status") == "completed":
+                # 内部任务成功完成，已经覆盖了超时状态，不需要额外处理
+                _log(f"[Job {job_id}] recovered from timeout, completed successfully")
+                return
+            else:
+                # 内部任务完成但没有成功，标记为失败
+                _set_job(job_id, status="failed", error=err_msg)
+                try:
+                    with get_db_ctx() as db:
+                        report_service.mark_report_failed(db, job_id, err_msg)
+                except Exception:
+                    pass
+                _emit_job_event(job_id, "job.failed", {"job_id": job_id, "error": err_msg})
     except Exception:
-        pass
-    _emit_job_event(job_id, "job.failed", {"job_id": job_id, "error": err_msg})
+        # 内部任务在额外等待时间内也没有完成，标记为失败
+        _set_job(job_id, status="failed", error=err_msg)
+        try:
+            with get_db_ctx() as db:
+                report_service.mark_report_failed(db, job_id, err_msg)
+        except Exception:
+            pass
+        _emit_job_event(job_id, "job.failed", {"job_id": job_id, "error": err_msg})
 
 
 async def _run_job_inner(
@@ -2708,10 +2828,10 @@ async def analyze(
         {"job_id": job_id, "symbol": request.symbol, "trade_date": request.trade_date},
     )
     if request.dry_run:
-        await _run_job(job_id, request, True, True, current_user.id, "api")
+        await _run_job(job_id, request, True, True, current_user.id, "api", job_timeout=_get_user_job_timeout(current_user.id))
         final_status = _get_job(job_id).get("status", "completed")
         return AnalyzeResponse(job_id=job_id, status=final_status, created_at=now)
-    _create_tracked_task(_run_job(job_id, request, True, True, current_user.id, "api"))
+    _create_tracked_task(_run_job(job_id, request, True, True, current_user.id, "api", job_timeout=_get_user_job_timeout(current_user.id)))
     return AnalyzeResponse(job_id=job_id, status="pending", created_at=now)
 
 
@@ -2765,6 +2885,62 @@ def stream_job_events(job_id: str, current_user: UserDB = Depends(_require_api_u
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/v1/jobs", response_model=JobListResponse)
+def list_jobs(
+    status: Optional[str] = Query(None, description="Filter by status: pending, running, completed, failed, timeout"),
+    limit: int = Query(100, ge=1, le=1000, description="Max number of jobs to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    current_user: UserDB = Depends(_require_api_user),
+) -> JobListResponse:
+    """获取当前用户的所有任务列表"""
+    all_jobs = get_job_store().list_jobs(user_id=current_user.id)
+    if status:
+        all_jobs = [j for j in all_jobs if j.get("status") == status]
+    all_jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    total = len(all_jobs)
+    paginated_jobs = all_jobs[offset:offset + limit]
+    return JobListResponse(
+        jobs=[
+            JobStatusResponse(
+                job_id=job.get("job_id", ""),
+                status=job.get("status", "unknown"),
+                created_at=job.get("created_at", ""),
+                started_at=job.get("started_at"),
+                finished_at=job.get("finished_at"),
+                symbol=job.get("symbol", ""),
+                trade_date=job.get("trade_date", ""),
+                error=job.get("error"),
+                waiting_ahead_count=job.get("waiting_ahead_count"),
+                scheduled_running_count=job.get("scheduled_running_count"),
+                scheduled_concurrency_limit=job.get("scheduled_concurrency_limit"),
+            )
+            for job in paginated_jobs
+        ] if paginated_jobs else [],
+        total=total,
+    )
+
+
+@app.post("/v1/jobs/{job_id}/cancel")
+def cancel_job(
+    job_id: str,
+    current_user: UserDB = Depends(_require_api_user),
+):
+    """取消指定任务"""
+    job = _require_job_owner(job_id, current_user)
+    current_status = job.get("status")
+    if current_status in ("completed", "failed"):
+        raise HTTPException(status_code=400, detail=f"任务已结束，无法取消（当前状态: {current_status}）")
+    err_msg = f"任务被用户取消"
+    _set_job(job_id, status="failed", error=err_msg, finished_at=_utcnow_iso())
+    try:
+        with get_db_ctx() as db:
+            report_service.mark_report_failed(db, job_id, err_msg)
+    except Exception:
+        pass
+    _emit_job_event(job_id, "job.failed", {"job_id": job_id, "error": err_msg})
+    return {"message": "任务已取消", "job_id": job_id}
 
 
 async def _ai_extract_symbol_and_date_streaming(
@@ -3051,7 +3227,7 @@ async def chat_completions(
                     "job.created",
                     {"job_id": job_id, "symbol": analyze_req.symbol, "trade_date": analyze_req.trade_date},
                 )
-                await _run_job(job_id, analyze_req, True, True, current_user.id, "chat")
+                await _run_job(job_id, analyze_req, True, True, current_user.id, "chat", job_timeout=_get_user_job_timeout(current_user.id))
             except Exception as exc:
                 _log(f"[chat] _extract_and_run failed: {exc}")
                 _emit_job_event(job_id, "job.failed", {"error": str(exc)})
@@ -3133,7 +3309,7 @@ async def chat_completions(
         {"job_id": job_id, "symbol": analyze_req.symbol, "trade_date": analyze_req.trade_date},
     )
     if request.dry_run:
-        await _run_job(job_id, analyze_req, True, True, current_user.id, "chat")
+        await _run_job(job_id, analyze_req, True, True, current_user.id, "chat", job_timeout=_get_user_job_timeout(current_user.id))
         status_text = _get_job(job_id).get("status", "completed")
         decision_text = _get_job(job_id).get("decision", "DRY_RUN")
         return {
@@ -3385,6 +3561,7 @@ def delete_backtest(job_id: str) -> Dict:
 _CONFIG_ALLOWED_KEYS = {
     "llm_provider", "deep_think_llm", "quick_think_llm",
     "backend_url", "max_debate_rounds", "max_risk_discuss_rounds",
+    "job_timeout", "stagger_delay", "batch_concurrency",
 }
 _CONFIG_PREFERENCE_KEYS = {"email_report_enabled", "wecom_report_enabled"}
 _CONFIG_MODEL_KEYS = ("llm_provider", "backend_url", "quick_think_llm", "deep_think_llm")
@@ -3631,6 +3808,9 @@ def _config_response_for_user(user: Optional[UserDB], db: Session) -> UserRuntim
         backend_url=cfg["backend_url"],
         max_debate_rounds=cfg["max_debate_rounds"],
         max_risk_discuss_rounds=cfg["max_risk_discuss_rounds"],
+        job_timeout=getattr(user_cfg, "job_timeout", 1800) if user_cfg else 1800,
+        stagger_delay=getattr(user_cfg, "stagger_delay", 1) if user_cfg else 1,
+        batch_concurrency=getattr(user_cfg, "batch_concurrency", 3) if user_cfg else 3,
         has_api_key=bool(user_cfg and user_cfg.api_key_encrypted),
         has_wecom_webhook=bool(webhook_url),
         wecom_webhook_display=_mask_wecom_webhook(webhook_url),
@@ -3713,6 +3893,9 @@ def update_runtime_config(
         backend_url=updates.backend_url,
         max_debate_rounds=updates.max_debate_rounds,
         max_risk_discuss_rounds=updates.max_risk_discuss_rounds,
+        job_timeout=updates.job_timeout,
+        stagger_delay=updates.stagger_delay,
+        batch_concurrency=updates.batch_concurrency,
         api_key=updates.api_key,
         wecom_webhook_url=normalized_wecom_webhook,
         clear_api_key=updates.clear_api_key,
@@ -4230,6 +4413,15 @@ async def trigger_scheduled_analyses_batch(
             f"[Scheduled Batch Trigger] user={current_user.id} skipped missing item_ids={missing_item_ids}"
         )
 
+    # 读取用户的批量并发与错峰配置
+    stagger_delay, batch_concurrency = _get_user_batch_settings(current_user.id)
+    _log(
+        f"[Scheduled Batch Trigger] user={current_user.id} count={len(valid_item_ids)} "
+        f"stagger_delay={stagger_delay}s concurrency={batch_concurrency}"
+    )
+
+    pending_launches: List[tuple] = []  # (task_snapshot, job_id)
+
     for item_id in valid_item_ids:
         task = available_tasks[item_id]
 
@@ -4258,13 +4450,7 @@ async def trigger_scheduled_analyses_batch(
             "job.queued",
             {"job_id": job_id, "symbol": task["symbol"], "trade_date": actual_trade_date},
         )
-        _create_tracked_task(
-            _run_manual_trigger(
-                task_snapshot,
-                requested_trade_date,
-                job_id,
-            )
-        )
+        pending_launches.append((task_snapshot, job_id))
 
         jobs.append({
             "item_id": task["id"],
@@ -4276,6 +4462,23 @@ async def trigger_scheduled_analyses_batch(
             "current_position": scheduled_user_context.get("current_position"),
             "average_cost": scheduled_user_context.get("average_cost"),
         })
+
+    # 调度协程：按错峰间隔依次启动各个任务（任务内部用信号量限流）
+    async def _launch_batch_with_stagger():
+        for idx, (snapshot, job_id) in enumerate(pending_launches):
+            if idx > 0 and stagger_delay > 0:
+                await asyncio.sleep(stagger_delay)
+            _create_tracked_task(
+                _run_manual_trigger(
+                    snapshot,
+                    requested_trade_date,
+                    job_id,
+                    batch_concurrency=batch_concurrency,
+                ),
+                label=f"Manual batch trigger ({snapshot['symbol']})",
+            )
+
+    _create_tracked_task(_launch_batch_with_stagger(), label="Batch launch scheduler")
 
     return {
         "summary": {

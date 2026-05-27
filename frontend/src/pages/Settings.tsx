@@ -54,6 +54,9 @@ export default function Settings() {
     const [quickThinkLlm, setQuickThinkLlm] = useState('')
     const [maxDebateRounds, setMaxDebateRounds] = useState(1)
     const [maxRiskRounds, setMaxRiskRounds] = useState(1)
+    const [jobTimeout, setJobTimeout] = useState(1800)  // 任务超时时间（秒）
+    const [staggerDelay, setStaggerDelay] = useState(1)  // 批量任务错峰间隔（秒）
+    const [batchConcurrency, setBatchConcurrency] = useState(3)  // 批量任务并发上限
     const [serverFallbackEnabled, setServerFallbackEnabled] = useState(true)
     const [emailReportEnabled, setEmailReportEnabled] = useState(true)
     const [wecomReportEnabled, setWecomReportEnabled] = useState(true)
@@ -123,6 +126,9 @@ export default function Settings() {
                 setQuickThinkLlm(cfg.quick_think_llm)
                 setMaxDebateRounds(cfg.max_debate_rounds)
                 setMaxRiskRounds(cfg.max_risk_discuss_rounds)
+                setJobTimeout(cfg.job_timeout || 1800)
+                setStaggerDelay(cfg.stagger_delay ?? 1)
+                setBatchConcurrency(cfg.batch_concurrency ?? 3)
                 setHasStoredApiKey(!!cfg.has_api_key)
                 setHasStoredWebhook(!!cfg.has_wecom_webhook)
                 setStoredWebhookDisplay(cfg.wecom_webhook_display || '')
@@ -201,6 +207,9 @@ export default function Settings() {
         quick_think_llm: quickThinkLlm,
         max_debate_rounds: maxDebateRounds,
         max_risk_discuss_rounds: maxRiskRounds,
+        job_timeout: jobTimeout,
+        stagger_delay: staggerDelay,
+        batch_concurrency: batchConcurrency,
         api_key: llmApiKey || undefined,
         ...(options?.includeWecom ? {
             wecom_webhook_url: wecomWebhook.trim() || undefined,
@@ -570,6 +579,69 @@ export default function Settings() {
                             className="input w-full"
                             disabled={configLoading}
                         />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            任务超时时间（秒）
+                            <span className="ml-1 text-xs text-slate-400 font-normal">大模型响应慢时可适当调大</span>
+                        </label>
+                        <input
+                            type="number"
+                            min={300}
+                            max={7200}
+                            step={60}
+                            value={jobTimeout}
+                            onChange={e => setJobTimeout(Number(e.target.value))}
+                            className="input w-full"
+                            disabled={configLoading}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            默认 1800 秒（30 分钟），范围 300-7200 秒。超时后任务将自动终止。
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            批量任务并发上限
+                            <span className="ml-1 text-xs text-slate-400 font-normal">同时执行的批量任务数</span>
+                        </label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            step={1}
+                            value={batchConcurrency}
+                            onChange={e => setBatchConcurrency(Number(e.target.value))}
+                            className="input w-full"
+                            disabled={configLoading}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            默认 3。手动批量触发与定时调度都会受此限制约束，建议根据 LLM 配额调节。
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            批量任务错峰间隔（秒）
+                            <span className="ml-1 text-xs text-slate-400 font-normal">相邻任务启动间隔</span>
+                        </label>
+                        <input
+                            type="number"
+                            min={0}
+                            max={300}
+                            step={1}
+                            value={staggerDelay}
+                            onChange={e => setStaggerDelay(Number(e.target.value))}
+                            className="input w-full"
+                            disabled={configLoading}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            默认 1 秒。设置为 0 表示不错峰。避免瞬时压垮 LLM 接口。
+                        </p>
                     </div>
                 </div>
 

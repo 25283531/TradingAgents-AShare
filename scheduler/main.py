@@ -225,6 +225,16 @@ async def _run_scheduled_analysis_once(
         async with _concurrency_slot(job_id, symbol):
             req = await asyncio.to_thread(_build_request_sync)
 
+            # Get user's job timeout configuration
+            def _get_user_timeout():
+                with get_db_ctx() as db:
+                    config = auth_service.get_user_llm_config(db, user_id)
+                    if config and config.job_timeout:
+                        return config.job_timeout
+                    return None
+            
+            user_timeout = await asyncio.to_thread(_get_user_timeout)
+
             await _run_job(
                 job_id,
                 req,
@@ -232,6 +242,7 @@ async def _run_scheduled_analysis_once(
                 True,
                 user_id,
                 "scheduled" if mark_schedule_run else "scheduled_manual",
+                job_timeout=user_timeout,
             )
         job_state = _get_job(job_id)
         if job_state.get("status") == "failed":
@@ -301,12 +312,31 @@ async def _scheduler_loop():
 
             def _claim_pending_tasks():
                 with get_db_ctx() as db:
-                    tasks = scheduled_service.get_pending_tasks(db, today, current_hhmm)
-                    if not tasks:
+                    # Use SELECT ... FOR UPDATE to lock rows atomically
+                    # This prevents race conditions in multi-process scheduler setup
+                    from api.database import ScheduledAnalysisDB
+                    
+                    # First, get pending tasks with row lock to prevent concurrent claims
+                    pending = (
+                        db.query(ScheduledAnalysisDB)
+                        .filter(
+                            ScheduledAnalysisDB.is_active == True,
+                            ScheduledAnalysisDB.last_run_status != "running",
+                            (ScheduledAnalysisDB.last_run_date != today) | (ScheduledAnalysisDB.last_run_date == None),
+                        )
+                        .filter(ScheduledAnalysisDB.trigger_time <= current_hhmm)
+                        .with_for_update(skip_locked=True)
+                        .all()
+                    )
+                    
+                    if not pending:
                         return []
-                    for task in tasks:
+                    
+                    # Update status atomically
+                    for task in pending:
                         task.last_run_date = today
                         task.last_run_status = "running"
+                    
                     db.commit()
                     return [
                         {
@@ -315,7 +345,7 @@ async def _scheduler_loop():
                             "symbol": task.symbol,
                             "horizon": task.horizon,
                         }
-                        for task in tasks
+                        for task in pending
                     ]
 
             task_snapshots = await asyncio.to_thread(_claim_pending_tasks)
@@ -323,9 +353,21 @@ async def _scheduler_loop():
                 continue
 
             _log(f"[Scheduler] Launching {len(task_snapshots)} tasks (staggered)")
+            
             for i, snap in enumerate(task_snapshots):
                 if i > 0:
-                    await asyncio.sleep(1)
+                    # Get user's stagger_delay configuration, fallback to env var
+                    def _get_user_stagger_delay(user_id: str) -> int:
+                        with get_db_ctx() as db:
+                            config = auth_service.get_user_llm_config(db, user_id)
+                            if config and config.stagger_delay is not None:
+                                return config.stagger_delay
+                            return int(os.getenv("SCHEDULER_STAGGER_DELAY", "1"))
+                    
+                    stagger_delay = await asyncio.to_thread(_get_user_stagger_delay, snap.user_id)
+                    if stagger_delay > 0:
+                        await asyncio.sleep(stagger_delay)
+                
                 _create_tracked_task(_run_scheduled_job(snap, today))
 
         except Exception as e:

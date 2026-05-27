@@ -47,7 +47,6 @@ export default function TrackingBoardPanel() {
         }
     })
     const [showImportSection, setShowImportSection] = useState(false)
-    const [positionText, setPositionText] = useState('')
     const [importClearing, setImportClearing] = useState(false)
     const [importFeedback, setImportFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
     const [vlmParsing, setVlmParsing] = useState(false)
@@ -123,34 +122,11 @@ export default function TrackingBoardPanel() {
         } catch { /* silent */ }
     }, [])
 
-    const parsePositionLines = useCallback((text: string): PortfolioPositionInput[] => {
-        const positions: PortfolioPositionInput[] = []
-        for (const raw of text.split('\n')) {
-            const line = raw.trim()
-            if (!line) continue
-            const parts = line.split(/[\s\t]+/)
-            if (parts.length < 1) continue
-            const symbol = parts[0].replace(/\.(SZ|SH|BJ)$/i, '')
-            if (!/^\d{6}$/.test(symbol)) continue
-            const name = parts.length > 1 && !/^\d/.test(parts[1]) ? parts[1] : undefined
-            const numericParts = parts.slice(1).filter(p => /^[\d.]+$/.test(p))
-            positions.push({
-                symbol,
-                name,
-                current_position: numericParts[0] ? Number(numericParts[0]) : undefined,
-                average_cost: numericParts[1] ? Number(numericParts[1]) : undefined,
-                market_value: numericParts[2] ? Number(numericParts[2]) : undefined,
-            })
-        }
-        return positions
-    }, [])
-
     const handleSavePositionsFromForm = useCallback(async (positions: PortfolioPositionInput[]) => {
         if (positions.length === 0) {
             setImportFeedback({ tone: 'error', message: '未解析到有效持仓，请检查格式' })
             return
         }
-        setImportSaving(true)
         setImportFeedback(null)
         try {
             await api.syncPortfolioImport({ positions, auto_apply_scheduled: true })
@@ -158,8 +134,6 @@ export default function TrackingBoardPanel() {
             await refreshBoard()
         } catch (e) {
             setImportFeedback({ tone: 'error', message: e instanceof Error ? e.message : '保存失败' })
-        } finally {
-            setImportSaving(false)
         }
     }, [refreshBoard])
 
@@ -170,7 +144,6 @@ export default function TrackingBoardPanel() {
         try {
             await api.clearPortfolioImport()
             setImportFeedback({ tone: 'success', message: '已清空持仓' })
-            setPositionText('')
             await refreshBoard()
         } catch (e) {
             setImportFeedback({ tone: 'error', message: e instanceof Error ? e.message : '清空失败' })
@@ -193,22 +166,16 @@ export default function TrackingBoardPanel() {
                 setImportFeedback({ tone: 'error', message: '未从截图中识别到持仓信息' })
                 return
             }
-            // Populate textarea for user review
-            const lines = result.positions.map(p => {
-                const parts = [p.symbol, p.name || '']
-                if (p.current_position != null) parts.push(String(p.current_position))
-                if (p.average_cost != null) parts.push(String(p.average_cost))
-                if (p.market_value != null) parts.push(String(p.market_value))
-                return parts.join(' ')
-            })
-            setPositionText(lines.join('\n'))
-            setImportFeedback({ tone: 'success', message: `已从截图识别 ${result.positions.length} 只持仓，请确认后保存` })
+            // Save directly after image parsing
+            await api.syncPortfolioImport({ positions: result.positions, auto_apply_scheduled: true })
+            setImportFeedback({ tone: 'success', message: `已从截图识别并保存 ${result.positions.length} 只持仓` })
+            await refreshBoard()
         } catch (e) {
-            setImportFeedback({ tone: 'error', message: e instanceof Error ? e.message : '图片解析失败' })
+            setImportFeedback({ tone: 'error', message: e instanceof Error ? e.message : '图片解析或保存失败' })
         } finally {
             setVlmParsing(false)
         }
-    }, [])
+    }, [refreshBoard])
 
     // Auto-expand import section when no items
     useEffect(() => {

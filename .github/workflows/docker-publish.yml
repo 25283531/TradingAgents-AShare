@@ -45,8 +45,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
-            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=match,pattern=v*,value=latest
+            type=raw,value=latest
 
       - name: Inspect Tags
         run: |

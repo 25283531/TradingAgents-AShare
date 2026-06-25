@@ -395,6 +395,7 @@ export default function Dashboard() {
         <DiscoveryPanel onSymbolSelect={handleSymbolSelect} />
     </div>
 )
+}
 
 function TrackingBoardSummary({
     trackingBoard,

@@ -56,7 +56,7 @@ class TradingAgentsGraph:
 
     def __init__(
         self,
-        selected_analysts=["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price"],
+        selected_analysts=["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price", "sector_rotation", "anti_quant_trap"],
         debug=False,
         config: Dict[str, Any] = None,
         callbacks: Optional[List] = None,
@@ -366,6 +366,8 @@ class TradingAgentsGraph:
             "macro_report": final_state.get("macro_report", ""),
             "smart_money_report": final_state.get("smart_money_report", ""),
             "volume_price_report": final_state.get("volume_price_report", ""),
+            "sector_report": final_state.get("sector_report", ""),
+            "anti_quant_report": final_state.get("anti_quant_report", ""),
         }
 
     @staticmethod
@@ -415,6 +417,8 @@ class TradingAgentsGraph:
             "macro_report": final_state.get("macro_report", ""),
             "smart_money_report": final_state.get("smart_money_report", ""),
             "volume_price_report": final_state.get("volume_price_report", ""),
+            "sector_report": final_state.get("sector_report", ""),
+            "anti_quant_report": final_state.get("anti_quant_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],

@@ -26,6 +26,8 @@ def _load_agent_factories() -> dict[str, Any]:
     from tradingagents.agents.analysts.smart_money_analyst import create_smart_money_analyst
     from tradingagents.agents.analysts.social_media_analyst import create_social_media_analyst
     from tradingagents.agents.analysts.volume_price_analyst import create_volume_price_analyst
+    from tradingagents.agents.analysts.sector_rotation_analyst import create_sector_rotation_analyst
+    from tradingagents.agents.analysts.anti_quant_trap_analyst import create_anti_quant_trap_analyst
     from tradingagents.agents.managers.research_manager import create_research_manager
     from tradingagents.agents.managers.risk_manager import create_risk_manager
     from tradingagents.agents.researchers.bear_researcher import create_bear_researcher
@@ -50,6 +52,8 @@ def _load_agent_factories() -> dict[str, Any]:
         "create_smart_money_analyst": create_smart_money_analyst,
         "create_social_media_analyst": create_social_media_analyst,
         "create_volume_price_analyst": create_volume_price_analyst,
+        "create_sector_rotation_analyst": create_sector_rotation_analyst,
+        "create_anti_quant_trap_analyst": create_anti_quant_trap_analyst,
         "create_trader": create_trader,
     }
 
@@ -153,6 +157,21 @@ class GraphSetup:
             )
             tool_nodes["volume_price"] = self.tool_nodes["volume_price"]
             done_nodes["volume_price"] = analyst_done_node
+
+        if "sector_rotation" in selected_analysts:
+            analyst_nodes["sector_rotation"] = factories["create_sector_rotation_analyst"](
+                self.quick_thinking_llm, self.data_collector
+            )
+            # 使用 smart_money 的工具节点（包含板块资金流）
+            tool_nodes["sector_rotation"] = self.tool_nodes["macro"]
+            done_nodes["sector_rotation"] = analyst_done_node
+
+        if "anti_quant_trap" in selected_analysts:
+            analyst_nodes["anti_quant_trap"] = factories["create_anti_quant_trap_analyst"](
+                self.quick_thinking_llm, self.data_collector
+            )
+            tool_nodes["anti_quant_trap"] = self.tool_nodes["smart_money"]
+            done_nodes["anti_quant_trap"] = analyst_done_node
 
         # Create researcher and manager nodes
         bull_researcher_node = factories["create_bull_researcher"](

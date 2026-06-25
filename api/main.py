@@ -4873,6 +4873,57 @@ def mark_feedback_read(
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+# ─── Recommendation API ──────────────────────────────────────────────────────
+
+class RecommendationStock(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    is_bullish: Optional[bool] = None
+
+
+class RecommendationResponse(BaseModel):
+    stocks: List[RecommendationStock]
+
+
+@app.get("/api/recommendation", response_model=RecommendationResponse)
+async def get_recommendations():
+    """获取每日中线趋势股推荐（经过硬过滤）。"""
+    try:
+        from tradingagents.dataflows.filters.stock_filters import get_filtered_candidates
+        from tradingagents.dataflows.providers import build_default_registry
+        
+        registry = build_default_registry()
+        provider = registry.get("cn_akshare")
+        
+        if provider is None:
+            _log("[Recommendation] cn_akshare provider not found")
+            return {"stocks": []}
+        
+        candidates = get_filtered_candidates(provider, top_n=10)
+        
+        stocks = []
+        code_to_name = _get_reverse_stock_map_cached_only()
+        
+        for stock in candidates:
+            symbol = stock.get("symbol", "")
+            name = stock.get("name", code_to_name.get(symbol, ""))
+            price = stock.get("price", 0)
+            is_bullish = stock.get("is_bullish")
+            
+            stocks.append({
+                "symbol": symbol,
+                "name": name,
+                "price": price,
+                "is_bullish": is_bullish,
+            })
+        
+        return {"stocks": stocks[:10]}
+    except Exception as exc:
+        _log(f"[Recommendation] Failed: {exc}")
+        return {"stocks": []}
+
+
 # ─── Static Files & SPA Routing ──────────────────────────────────────────────
 
 # Serve uploaded files (avatars etc.) from shared uploads directory

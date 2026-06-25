@@ -397,6 +397,10 @@ class ApiService {
             method: 'DELETE',
         })
     }
+
+    async getRecommendations(): Promise<{ stocks: Array<{ symbol: string; name: string; price: number; is_bullish: boolean | undefined }> }> {
+        return this.request('/api/recommendation')
+    }
 }
 
 export const api = new ApiService()

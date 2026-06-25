@@ -1,8 +1,8 @@
 # TradingAgents-AShare：A股智能投研多智能体系统
 
-本项目是基于多智能体协作的 A 股深度分析系统，模拟顶级投研机构的决策闭环，通过 14 名专业 Agent 的多空辩论与风控博弈，为投资者提供结构化的交易建议。
+本项目是基于多智能体协作的 A 股深度分析系统，模拟顶级投研机构的决策闭环，通过 16 名专业 Agent 的多空辩论与风控博弈，为投资者提供结构化的交易建议。系统内置代码级硬过滤与 LLM 软决策双重风控，有效识别量化陷阱，保护散户投资者免受短线收割。
 
-[在线体验](https://app.510168.xyz) | [Releases](https://github.com/KylinMountain/TradingAgents-AShare/releases) | [OpenClaw 技能](https://clawhub.ai/kylinmountain/tradingagents-analysis)
+本项目fork自 [Releases](https://github.com/KylinMountain/TradingAgents-AShare/releases) | [OpenClaw 技能](https://clawhub.ai/kylinmountain/tradingagents-analysis)
 
 <div align="center">
   <img src="assets/web/analysis.png" width="100%" alt="智能分析"/>
@@ -10,6 +10,19 @@
 </div>
 
 > TradingAgents-AShare 已正式上线 OpenClaw！您只需通过 `tradingagents-analysis` 技能，即可让您的 AI助手具备专业的 A 股深度投研能力。
+
+### 中线趋势股发现（DiscoveryPanel）
+
+系统每日自动扫描市场，通过代码级硬过滤（市值>50亿、日均成交额>2亿、均线多头排列）筛选出中线趋势股，展示于左侧 DiscoveryPanel。列表项实时显示趋势图标（多头/空头/中性），点击即可一键填入分析输入框并触发深度投研流程。
+
+### 量化防收割硬过滤
+
+底层 Python 脚本执行硬性筛选，自动剔除以下高风险标的：
+- 市值小于 50 亿（易被量化控盘）
+- 日均成交额小于 2 亿（流动性不足）
+- 处于空头排列或强下行趋势
+
+通过后再进入 LLM 软决策分析，双重保障降低被量化收割的风险。
 
 ## 功能特性
 
@@ -66,10 +79,19 @@ TradingAgents 模拟真实交易机构的部门协作，将复杂任务拆解为
   <img src="assets/schema.png" style="width: 100%; height: auto;">
 </p>
 
-*图中仅展示核心节点，完整流程包含 14 名智能体。
+*图中仅展示核心节点，完整流程包含 16 名智能体。
 
 ### 分析师团队
-基本面、情绪、新闻、技术、宏观、主力资金 6 大维度同步作业，对市场数据进行深度提取与初步评估。
+基本面、情绪、新闻、技术、宏观、主力资金、**行业轮动**、**防量化陷阱** 8 大维度同步作业，对市场数据进行深度提取与初步评估。
+
+新增分析师：
+- **行业轮动分析师**：识别市场资金主线，判断标的所处行业是否处于上升通道，评估行业催化剂与轮动周期
+- **防量化陷阱分析师**：识别量化控盘股特征（市值、流动性、价量异常、龙虎榜游资进出），给出风险等级与规避建议
+
+数据预处理升级：
+- **趋势因子**：MA5/20/60 多头排列检测与趋势强度计算
+- **筹码分布**：持仓成本分布分析
+- **周K线数据**：Top-down 大周期视角分析
 
 <p align="center">
   <img src="assets/analyst.png" width="90%">
@@ -155,6 +177,7 @@ uv run python -m uvicorn api.main:app --port 8000
 | 跟踪看板摘要/明细 | `GET /v1/dashboard/tracking-board` |
 | 批量定时任务操作 | `PATCH /v1/scheduled/batch`、`POST /v1/scheduled/batch/delete`、`POST /v1/scheduled/batch/trigger` |
 | 模型 warmup | `POST /v1/config/warmup` |
+| 每日趋势股推荐 | `GET /api/recommendation` → 返回 `{"stocks": [{"symbol", "name", "price", "is_bullish"}]}` |
 
 认证：Web 端登录后在"设置 / API Token"生成密钥，通过 `Authorization: Bearer <TOKEN>` 传入。
 

@@ -341,6 +341,9 @@ export interface Report {
     waiting_ahead_count?: number | null
     scheduled_running_count?: number | null
     scheduled_concurrency_limit?: number | null
+    medium_term_trend_strength?: string
+    sector_topic_hotness?: string
+    quant_harvest_risk?: string
 }
 
 export interface ReportDetail extends Report {
@@ -761,4 +764,15 @@ export interface DebateMessage {
     content: string
     isVerdict?: boolean
     horizon?: string
+}
+
+export interface Recommendation {
+    symbol: string
+    name: string
+    price: number
+    is_bullish: boolean | undefined
+}
+
+export interface RecommendationResponse {
+    stocks: Recommendation[]
 }

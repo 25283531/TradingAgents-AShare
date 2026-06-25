@@ -176,6 +176,8 @@ class AgentState(MessagesState):
     macro_report: Annotated[str, "Report from the Macro/Sector Analyst"]
     smart_money_report: Annotated[str, "Report from the Smart Money Analyst"]
     volume_price_report: Annotated[str, "Report from the Volume Price Analyst"]
+    sector_report: Annotated[str, "Report from the Sector Rotation Analyst"]
+    anti_quant_report: Annotated[str, "Report from the Anti-Quant Trap Analyst"]
     user_intent: Annotated[Optional[UserIntent], "Parsed user intent from natural language"]
     horizon: Annotated[str, "Current analysis horizon: short or medium"]
     analyst_traces: Annotated[List[TraceItem], operator.add]

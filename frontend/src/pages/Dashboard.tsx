@@ -1,10 +1,11 @@
-import { TrendingUp, Activity, FileText, CheckCircle, ArrowRight, XCircle, Clock, ListTodo, Loader2 } from 'lucide-react'
+import { TrendingUp, Activity, FileText, CheckCircle, ArrowRight, XCircle, Clock, ListTodo, Loader2, TrendingDown, Minus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { api } from '@/services/api'
 import { useAnalysisStore } from '@/stores/analysisStore'
 import { useAuthStore } from '@/stores/authStore'
+import DiscoveryPanel from '@/components/DiscoveryPanel'
 import type { JobStatus, Report, TrackingBoardResponse } from '@/types'
 
 export default function Dashboard() {
@@ -84,21 +85,26 @@ export default function Dashboard() {
         }
     }
 
+    const handleSymbolSelect = (symbol: string) => {
+        navigate(`/analysis?symbol=${symbol}`)
+    }
+
     return (
-        <div className="space-y-6">
-            {dashboardError && (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
-                    {dashboardError}
+        <div className="flex gap-6">
+            <div className="flex-1 space-y-6">
+                {dashboardError && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+                        {dashboardError}
+                    </div>
+                )}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">控制台</h1>
+                        <p className="mt-1 text-slate-500 dark:text-slate-400">
+                            {user?.email ? `当前账户：${user.email}` : '欢迎使用 TradingAgents 智能分析系统'}
+                        </p>
+                    </div>
                 </div>
-            )}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">控制台</h1>
-                    <p className="mt-1 text-slate-500 dark:text-slate-400">
-                        {user?.email ? `当前账户：${user.email}` : '欢迎使用 TradingAgents 智能分析系统'}
-                    </p>
-                </div>
-            </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard
@@ -181,42 +187,100 @@ export default function Dashboard() {
                         </button>
                     </p>
                 ) : (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {recentReports.map(report => {
-                            const decisionColor = report.decision?.toUpperCase().includes('BUY') || report.decision?.includes('增持')
-                                ? 'text-red-600 dark:text-red-400'
-                                : report.decision?.toUpperCase().includes('SELL') || report.decision?.includes('减持')
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-slate-500 dark:text-slate-400'
-                            return (
-                                <div
-                                    key={report.id}
-                                    className="mx-[-1rem] flex cursor-pointer items-center justify-between px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                                    onClick={() => navigate(`/reports?report=${report.id}`)}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-500/10">
-                                            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                        </div>
-                                        <div>
-                                            <p className="font-medium text-slate-900 dark:text-slate-100 text-sm">{report.name || report.symbol}</p>
-                                            <p className="text-xs text-slate-400 dark:text-slate-500">{report.trade_date}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <span className={`text-sm font-medium ${decisionColor}`}>
-                                            {report.decision || '-'}
-                                        </span>
-                                        {report.confidence != null && (
-                                            <span className="text-xs text-slate-400">{report.confidence}%</span>
-                                        )}
-                                        <p className="hidden text-xs text-slate-400 dark:text-slate-500 sm:block">
-                                            {report.created_at ? new Date(report.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-                                        </p>
-                                    </div>
-                                </div>
-                            )
-                        })}
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-slate-200 dark:border-slate-700">
+                                    <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">股票</th>
+                                    <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">决策</th>
+                                    <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">中期趋势强度</th>
+                                    <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">行业题材热度</th>
+                                    <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">量化收割风险提示</th>
+                                    <th className="text-right py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">时间</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                {recentReports.map(report => {
+                                    const decisionColor = report.decision?.toUpperCase().includes('BUY') || report.decision?.includes('增持')
+                                        ? 'text-red-600 dark:text-red-400'
+                                        : report.decision?.toUpperCase().includes('SELL') || report.decision?.includes('减持')
+                                            ? 'text-green-600 dark:text-green-400'
+                                            : 'text-slate-500 dark:text-slate-400'
+
+                                    const getTrendStrengthIcon = (strength?: string) => {
+                                        if (!strength) return <Minus className="w-4 h-4 text-slate-400" />
+                                        if (strength.includes('强') || strength.includes('高')) return <TrendingUp className="w-4 h-4 text-green-500" />
+                                        if (strength.includes('弱') || strength.includes('低')) return <TrendingDown className="w-4 h-4 text-red-500" />
+                                        return <Minus className="w-4 h-4 text-slate-400" />
+                                    }
+
+                                    const getHotnessColor = (hotness?: string) => {
+                                        if (!hotness) return 'text-slate-400'
+                                        if (hotness.includes('热') || hotness.includes('高')) return 'text-red-500 dark:text-red-400'
+                                        if (hotness.includes('冷') || hotness.includes('低')) return 'text-blue-500 dark:text-blue-400'
+                                        return 'text-slate-500'
+                                    }
+
+                                    const getRiskColor = (risk?: string) => {
+                                        if (!risk) return 'text-slate-400'
+                                        if (risk.includes('高') || risk.includes('风险')) return 'text-red-500 dark:text-red-400'
+                                        if (risk.includes('低') || risk.includes('安全')) return 'text-green-500 dark:text-green-400'
+                                        return 'text-amber-500 dark:text-amber-400'
+                                    }
+
+                                    return (
+                                        <tr
+                                            key={report.id}
+                                            className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                            onClick={() => navigate(`/reports?report=${report.id}`)}
+                                        >
+                                            <td className="py-3 px-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-500/10">
+                                                        <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-slate-900 dark:text-slate-100 text-sm">{report.name || report.symbol}</p>
+                                                        <p className="text-xs text-slate-400 dark:text-slate-500">{report.trade_date}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <span className={`text-sm font-medium ${decisionColor}`}>
+                                                    {report.decision || '-'}
+                                                </span>
+                                                {report.confidence != null && (
+                                                    <span className="text-xs text-slate-400 ml-2">{report.confidence}%</span>
+                                                )}
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <div className="flex items-center gap-2">
+                                                    {getTrendStrengthIcon(report.medium_term_trend_strength)}
+                                                    <span className="text-sm text-slate-600 dark:text-slate-300">
+                                                        {report.medium_term_trend_strength || '-'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <span className={`text-sm ${getHotnessColor(report.sector_topic_hotness)}`}>
+                                                    {report.sector_topic_hotness || '-'}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <span className={`text-sm ${getRiskColor(report.quant_harvest_risk)}`}>
+                                                    {report.quant_harvest_risk || '-'}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-right">
+                                                <p className="text-xs text-slate-400 dark:text-slate-500">
+                                                    {report.created_at ? new Date(report.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>
@@ -328,8 +392,9 @@ export default function Dashboard() {
                 )}
             </div>
         </div>
-    )
-}
+        <DiscoveryPanel onSymbolSelect={handleSymbolSelect} />
+    </div>
+)
 
 function TrackingBoardSummary({
     trackingBoard,

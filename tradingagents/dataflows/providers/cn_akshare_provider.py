@@ -136,6 +136,18 @@ class CnAkshareProvider(BaseMarketDataProvider):
             "10 日指数均线（EMA）：短期响应更快。"
             "用途：捕捉短线动量变化与潜在入场时机。"
         ),
+        "close_5_sma": (
+            "5 日均线（SMA）：短期趋势指标。"
+            "用途：识别短期趋势方向。"
+        ),
+        "close_20_sma": (
+            "20 日均线（SMA）：短期趋势基准。"
+            "用途：辅助识别短期金叉/死叉结构。"
+        ),
+        "close_60_sma": (
+            "60 日均线（SMA）：中长期趋势指标。"
+            "用途：确认中期趋势方向。"
+        ),
         "macd": "MACD：趋势与动量综合指标。",
         "macds": "MACD 信号线（Signal）。",
         "macdh": "MACD 柱状图（Histogram）。",
@@ -146,6 +158,7 @@ class CnAkshareProvider(BaseMarketDataProvider):
         "atr": "ATR：真实波动幅度均值，用于波动与风控。",
         "vwma": "VWMA：成交量加权均线。",
         "mfi": "MFI：资金流量指标。",
+        "ma_bullish": "均线多头排列状态。",
     }
 
     @property
@@ -429,6 +442,48 @@ class CnAkshareProvider(BaseMarketDataProvider):
         df = self._fetch_hist_df(symbol, start_date, end_date)
         return self._format_ak_hist(df, symbol, start_date, end_date)
 
+    def get_weekly_stock_data(self, symbol: str, start_date: str, end_date: str) -> str:
+        """获取周K线数据（Top-down Analysis 强制大周期视角）。"""
+        with AKSHARE_CALL_LOCK:
+            ak = self._ak()
+            code = self._normalize_symbol(symbol)
+            start_yyyymmdd = start_date.replace("-", "")
+            end_yyyymmdd = end_date.replace("-", "")
+
+            try:
+                df = ak.stock_zh_a_hist(
+                    symbol=code,
+                    period="week",
+                    start_date=start_yyyymmdd,
+                    end_date=end_yyyymmdd,
+                    adjust="qfq"
+                )
+                if df is None or df.empty:
+                    return f"周K线数据获取失败：{symbol}"
+
+                df = df.rename(columns={
+                    "日期": "Date",
+                    "开盘": "Open",
+                    "收盘": "Close",
+                    "最高": "High",
+                    "最低": "Low",
+                    "成交量": "Volume",
+                    "成交额": "Amount",
+                })
+
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+                df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
+
+                result = f"## {symbol} 周K线数据（{start_date} 至 {end_date}）：\n\n"
+                result += "Date,Open,High,Low,Close,Volume,Amount\n"
+                for _, row in df.tail(20).iterrows():
+                    date_str = row["Date"].strftime("%Y-%m-%d")
+                    result += f"{date_str},{row.get('Open', '')},{row.get('High', '')},{row.get('Low', '')},{row.get('Close', '')},{row.get('Volume', '')},{row.get('Amount', '')}\n"
+
+                return result
+            except Exception as exc:
+                return f"周K线数据获取失败：{symbol} - {type(exc).__name__}: {exc}"
+
     def get_indicators(
         self, symbol: str, indicator: str, curr_date: str, look_back_days: int
     ) -> str:
@@ -456,6 +511,9 @@ class CnAkshareProvider(BaseMarketDataProvider):
         )[["date", "open", "high", "low", "close", "volume"]].copy()
         ind_df["date"] = pd.to_datetime(ind_df["date"], errors="coerce")
         ind_df = ind_df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+
+        if indicator == "ma_bullish":
+            return self._calculate_ma_bullish(ind_df, curr_date, look_back_days)
 
         ss = wrap(ind_df)
         indicator_series = ss[indicator]
@@ -487,6 +545,75 @@ class CnAkshareProvider(BaseMarketDataProvider):
             + self.INDICATOR_DESCRIPTIONS[indicator]
         )
         return result
+
+    def _calculate_ma_bullish(self, ind_df: pd.DataFrame, curr_date: str, look_back_days: int) -> str:
+        """计算均线多头排列状态。"""
+        df = ind_df.copy()
+        ma_periods = [5, 20, 60]
+        for period in ma_periods:
+            df[f"ma{period}"] = df["close"].rolling(window=period).mean()
+
+        df = df.dropna(subset=[f"ma{p}" for p in ma_periods])
+        if df.empty:
+            return f"## ma_bullish 均线排列状态（{curr_date}）：\n\n数据不足，无法计算均线排列"
+
+        latest = df.iloc[-1]
+        ma5, ma20, ma60 = latest["ma5"], latest["ma20"], latest["ma60"]
+
+        is_bullish = ma5 > ma20 > ma60
+        is_bearish = ma5 < ma20 < ma60
+
+        if is_bullish:
+            status = "多头排列"
+            strength = self._calculate_trend_strength(df, ma_periods)
+        elif is_bearish:
+            status = "空头排列"
+            strength = self._calculate_trend_strength(df, ma_periods)
+        else:
+            status = "纠缠/无趋势"
+            strength = "无"
+
+        result = f"## ma_bullish 均线排列状态（{curr_date}）：\n\n"
+        result += f"当前状态：{status}\n"
+        result += f"趋势强度：{strength}\n"
+        result += f"MA5: {ma5:.2f}\n"
+        result += f"MA20: {ma20:.2f}\n"
+        result += f"MA60: {ma60:.2f}\n\n"
+        result += "多头排列定义：MA5 > MA20 > MA60\n"
+        result += "空头排列定义：MA5 < MA20 < MA60\n"
+
+        return result
+
+    def _calculate_trend_strength(self, df: pd.DataFrame, ma_periods: list[int]) -> str:
+        """计算趋势强度。"""
+        latest = df.iloc[-1]
+        prev = df.iloc[-5] if len(df) >= 5 else df.iloc[0]
+
+        ma_changes = []
+        for period in ma_periods:
+            curr_ma = latest[f"ma{period}"]
+            prev_ma = prev[f"ma{period}"]
+            if prev_ma != 0:
+                change_pct = (curr_ma - prev_ma) / prev_ma * 100
+                ma_changes.append(change_pct)
+
+        if not ma_changes:
+            return "无法计算"
+
+        avg_change = sum(ma_changes) / len(ma_changes)
+
+        if avg_change > 2:
+            return "强趋势"
+        elif avg_change > 0.5:
+            return "中等趋势"
+        elif avg_change > 0:
+            return "弱趋势"
+        elif avg_change > -0.5:
+            return "微弱"
+        elif avg_change > -2:
+            return "下行趋势"
+        else:
+            return "强下行"
 
     def get_fundamentals(self, ticker: str, curr_date: str = None) -> str:
         with AKSHARE_CALL_LOCK:
@@ -861,41 +988,148 @@ class CnAkshareProvider(BaseMarketDataProvider):
         except (ValueError, TypeError):
             return None
 
-    def get_board_fund_flow(self) -> str:
-        """获取行业板块资金流向排名。"""
-        try:
-            ak = self._ak()
-            with AKSHARE_CALL_LOCK:
-                df = ak.stock_board_industry_fund_flow_em(symbol="今日")
-            if df is None or df.empty:
-                return "今日板块资金流向数据暂不可用。"
-            sort_col = "今日主力净流入-净额"
-            if sort_col in df.columns:
-                df_sorted = df.sort_values(sort_col, ascending=False).reset_index(drop=True)
-            else:
-                df_sorted = df.reset_index(drop=True)
-            df_sorted.insert(0, "排名", range(1, len(df_sorted) + 1))
-            total = len(df_sorted)
-            result = df_sorted.head(10).to_string(index=False)
-            return f"板块资金流向排名（共{total}个板块，前10名）：\n{result}"
-        except Exception as exc:
-            return f"板块资金流向数据获取失败：{type(exc).__name__}: {exc}"
+    # ── 资金流向：多数据来源兜底 ──
+
+    def _get_individual_fund_flow_primary(self, ak, code: str) -> pd.DataFrame | None:
+        """Source 1: 原 stock_individual_fund_flow 接口。"""
+        market = "sh" if code[:1] in ("5", "6", "9") else "sz"
+        df = ak.stock_individual_fund_flow(stock=code, market=market)
+        if df is not None and not df.empty:
+            return df
+        return None
+
+    def _get_individual_fund_flow_ths(self, ak, code: str) -> pd.DataFrame | None:
+        """Source 2: 同花顺数据中心-个股资金流向。"""
+        df = ak.stock_fund_flow_individual(symbol=code)
+        if df is not None and not df.empty:
+            # 同花顺接口返回的列名可能不同，尽量标准化
+            df = df.copy()
+            # 如果包含日期列则保留，否则尝试构造近 N 行
+            return df
+        return None
+
+    def _get_individual_fund_flow_rank(self, ak, code: str) -> pd.DataFrame | None:
+        """Source 3: 个股资金流排名，按代码过滤。"""
+        # 尝试获取今日/5日/10日排名数据并过滤目标股票
+        for indicator in ("今日", "5日", "10日"):
+            try:
+                df = ak.stock_individual_fund_flow_rank(indicator=indicator)
+                if df is None or df.empty:
+                    continue
+                # 常见代码列名："代码", "股票代码"
+                code_col = None
+                for c in ("代码", "股票代码", "symbol", "code"):
+                    if c in df.columns:
+                        code_col = c
+                        break
+                if code_col is None:
+                    continue
+                # 过滤出目标股票（排名数据可能不带 .sh/.sz 后缀）
+                mask = df[code_col].astype(str).str.strip().str.replace(r"\.(sh|sz|SH|SZ)", "", regex=True) == code
+                if mask.any():
+                    return df[mask].copy()
+            except Exception:
+                continue
+        return None
+
+    def _get_individual_fund_flow_xq(self, ak, code: str) -> pd.DataFrame | None:
+        """Source 4: 雪球个股资金流向。"""
+        df = ak.stock_individual_fund_flow_xq(symbol=code)
+        if df is not None and not df.empty:
+            return df
+        return None
 
     def get_individual_fund_flow(self, symbol: str) -> str:
-        """获取个股近期主力资金净流向。"""
+        """获取个股近期主力资金净流向（多数据来源自动兜底）。"""
         try:
             ak = self._ak()
             code = self._normalize_symbol(symbol)
-            # 沪市：以 5、6、9 开头；其余为深市
-            market = "sh" if code[:1] in ("5", "6", "9") else "sz"
-            with AKSHARE_CALL_LOCK:
-                df = ak.stock_individual_fund_flow(stock=code, market=market)
-            if df is None or df.empty:
-                return f"{symbol} 近期主力资金流向数据暂不可用。"
-            df_recent = df.tail(5)
-            return f"{symbol} 近5日主力资金净流向：\n{df_recent.to_string(index=False)}"
+            sources = [
+                ("stock_individual_fund_flow", self._get_individual_fund_flow_primary),
+                ("stock_fund_flow_individual", self._get_individual_fund_flow_ths),
+                ("stock_individual_fund_flow_rank", self._get_individual_fund_flow_rank),
+                ("stock_individual_fund_flow_xq", self._get_individual_fund_flow_xq),
+            ]
+            last_err = None
+            for name, fetcher in sources:
+                try:
+                    with AKSHARE_CALL_LOCK:
+                        df = fetcher(ak, code)
+                    if df is not None and not df.empty:
+                        # 尽量取近 5 条记录
+                        df_recent = df.tail(5)
+                        return f"{symbol} 近5日主力资金净流向（来源：{name}）：\n{df_recent.to_string(index=False)}"
+                except Exception as exc:
+                    last_err = exc
+                    continue
+            if last_err is not None:
+                return f"{symbol} 近期主力资金流向数据暂不可用。所有来源均失败：{type(last_err).__name__}"
+            return f"{symbol} 近期主力资金流向数据暂不可用。"
         except Exception as exc:
             return f"个股资金流向数据获取失败：{type(exc).__name__}: {exc}"
+
+    def _get_board_fund_flow_primary(self, ak) -> pd.DataFrame | None:
+        """Source 1: 原 stock_board_industry_fund_flow_em 接口。"""
+        df = ak.stock_board_industry_fund_flow_em(symbol="今日")
+        if df is not None and not df.empty:
+            return df
+        return None
+
+    def _get_board_fund_flow_sector(self, ak) -> pd.DataFrame | None:
+        """Source 2: 板块资金流排名。"""
+        df = ak.stock_sector_fund_flow_rank(indicator="今日")
+        if df is not None and not df.empty:
+            return df
+        return None
+
+    def _get_board_fund_flow_concept(self, ak) -> pd.DataFrame | None:
+        """Source 3: 概念板块资金流向。"""
+        df = ak.stock_board_concept_fund_flow_em(symbol="今日")
+        if df is not None and not df.empty:
+            return df
+        return None
+
+    def get_board_fund_flow(self) -> str:
+        """获取行业板块资金流向排名（多数据来源自动兜底）。"""
+        try:
+            ak = self._ak()
+            sources = [
+                ("stock_board_industry_fund_flow_em", self._get_board_fund_flow_primary),
+                ("stock_sector_fund_flow_rank", self._get_board_fund_flow_sector),
+                ("stock_board_concept_fund_flow_em", self._get_board_fund_flow_concept),
+            ]
+            last_err = None
+            for name, fetcher in sources:
+                try:
+                    with AKSHARE_CALL_LOCK:
+                        df = fetcher(ak)
+                    if df is not None and not df.empty:
+                        # 兼容不同列名进行排序
+                        sort_candidates = [
+                            "今日主力净流入-净额", "主力净流入-净额", "主力净流入",
+                            "净流入", "净流入额", "今日净流入", "主力净流入(亿)",
+                        ]
+                        sort_col = None
+                        for c in sort_candidates:
+                            if c in df.columns:
+                                sort_col = c
+                                break
+                        if sort_col is not None:
+                            df_sorted = df.sort_values(sort_col, ascending=False).reset_index(drop=True)
+                        else:
+                            df_sorted = df.reset_index(drop=True)
+                        df_sorted.insert(0, "排名", range(1, len(df_sorted) + 1))
+                        total = len(df_sorted)
+                        result = df_sorted.head(10).to_string(index=False)
+                        return f"板块资金流向排名（来源：{name}，共{total}个板块，前10名）：\n{result}"
+                except Exception as exc:
+                    last_err = exc
+                    continue
+            if last_err is not None:
+                return f"今日板块资金流向数据暂不可用。所有来源均失败：{type(last_err).__name__}"
+            return "今日板块资金流向数据暂不可用。"
+        except Exception as exc:
+            return f"板块资金流向数据获取失败：{type(exc).__name__}: {exc}"
 
     def get_lhb_detail(self, symbol: str, date: str) -> str:
         """获取龙虎榜数据，非异动日返回空提示（属正常）。"""

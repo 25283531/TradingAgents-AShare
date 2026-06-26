@@ -771,6 +771,8 @@ export interface Recommendation {
     name: string
     price: number
     is_bullish: boolean | undefined
+    industry?: string
+    change?: number
 }
 
 export interface RecommendationResponse {

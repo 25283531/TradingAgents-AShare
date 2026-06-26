@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { useEffect } from 'react'
 import { SpeedInsights } from '@vercel/speed-insights/react'
+import { ReactFlowProvider } from '@xyflow/react'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Discovery from './pages/Discovery'
@@ -44,33 +45,35 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/sponsor" element={<ExternalRedirect to={`https://${ONLINE_HOST}/sponsor`} fallback={<Sponsor />} />} />
-        <Route path="/thanks" element={<ExternalRedirect to={`https://${ONLINE_HOST}/thanks`} fallback={<Thanks />} />} />
-        <Route
-          path="*"
-          element={
-            <RequireAuth>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/discovery" element={<Discovery />} />
-                  <Route path="/tracking-board" element={<TrackingBoard />} />
-                  <Route path="/analysis" element={<Analysis />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/portfolio" element={<Portfolio />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/feedback" element={<Feedback />} />
-                </Routes>
-              </Layout>
-            </RequireAuth>
-          }
-        />
-      </Routes>
-      <SpeedInsights />
-    </BrowserRouter>
+    <ReactFlowProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/sponsor" element={<ExternalRedirect to={`https://${ONLINE_HOST}/sponsor`} fallback={<Sponsor />} />} />
+          <Route path="/thanks" element={<ExternalRedirect to={`https://${ONLINE_HOST}/thanks`} fallback={<Thanks />} />} />
+          <Route
+            path="*"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/discovery" element={<Discovery />} />
+                    <Route path="/tracking-board" element={<TrackingBoard />} />
+                    <Route path="/analysis" element={<Analysis />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/portfolio" element={<Portfolio />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/feedback" element={<Feedback />} />
+                  </Routes>
+                </Layout>
+              </RequireAuth>
+            }
+          />
+        </Routes>
+        <SpeedInsights />
+      </BrowserRouter>
+    </ReactFlowProvider>
   )
 }
 

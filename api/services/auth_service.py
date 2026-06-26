@@ -33,7 +33,7 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value.astimezone(timezone.utc)
 
 
-_DEFAULT_SECRET = "tradingagents-ashare-dev-secret"
+_DEFAULT_SECRET = "tradingagents-ashare-dev-secret-key-256-bit-minimum-length"
 
 
 def _secret_key() -> str:

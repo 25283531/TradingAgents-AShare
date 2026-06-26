@@ -128,6 +128,8 @@ const initialAgents: Agent[] = [
     { id: 'macro', name: 'Macro Analyst', team: 'Analyst Team', status: 'pending' },
     { id: 'smart_money', name: 'Smart Money Analyst', team: 'Analyst Team', status: 'pending' },
     { id: 'volume_price', name: 'Volume Price Analyst', team: 'Analyst Team', status: 'pending' },
+    { id: 'sector_rotation', name: 'Sector Rotation Analyst', team: 'Analyst Team', status: 'pending' },
+    { id: 'anti_quant', name: 'Anti-Quant Trap Analyst', team: 'Analyst Team', status: 'pending' },
 
     // Research Team
     { id: 'bull', name: 'Bull Researcher', team: 'Research Team', status: 'pending' },

@@ -1,64 +1,53 @@
-import { useEffect, useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, TrendingDown, Minus, ArrowRight, RefreshCw, Search, Filter, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, ArrowRight, RefreshCw, Search, Filter, X, Play } from 'lucide-react'
 import { api } from '@/services/api'
 import type { Recommendation } from '@/types'
 
 export default function Discovery() {
     const [recommendations, setRecommendations] = useState<Recommendation[]>([])
-    const [loading, setLoading] = useState(true)
+    const [loading, setLoading] = useState(false)
+    const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [searchTerm, setSearchTerm] = useState('')
     const [filterBullish, setFilterBullish] = useState<boolean | null>(null)
+    const [progress, setProgress] = useState(0)
     const navigate = useNavigate()
     const isMountedRef = useRef(true)
 
-    useEffect(() => {
-        isMountedRef.current = true
+    const fetchRecommendations = () => {
+        if (loading) return
+        
         setLoading(true)
         setError(null)
+        setProgress(0)
+        
+        const progressInterval = setInterval(() => {
+            setProgress(prev => {
+                if (prev >= 90) return 90
+                return prev + Math.random() * 15
+            })
+        }, 500)
 
         api.getRecommendations()
             .then(res => {
                 if (isMountedRef.current) {
                     setRecommendations(res.stocks)
+                    setLoaded(true)
+                    setProgress(100)
                 }
             })
             .catch(err => {
                 if (isMountedRef.current) {
                     console.error('Failed to load recommendations:', err)
-                    setError('获取推荐数据失败')
+                    setError('获取推荐数据失败，请检查网络连接')
                 }
             })
             .finally(() => {
+                clearInterval(progressInterval)
                 if (isMountedRef.current) {
                     setLoading(false)
-                }
-            })
-
-        return () => {
-            isMountedRef.current = false
-        }
-    }, [])
-
-    const handleRefresh = () => {
-        setLoading(true)
-        api.getRecommendations()
-            .then(res => {
-                if (isMountedRef.current) {
-                    setRecommendations(res.stocks)
-                    setError(null)
-                }
-            })
-            .catch(err => {
-                if (isMountedRef.current) {
-                    console.error('Failed to refresh recommendations:', err)
-                    setError('刷新失败')
-                }
-            })
-            .finally(() => {
-                if (isMountedRef.current) {
-                    setLoading(false)
+                    setProgress(100)
                 }
             })
     }
@@ -107,192 +96,235 @@ export default function Discovery() {
                     </p>
                 </div>
                 <button
-                    onClick={handleRefresh}
+                    onClick={fetchRecommendations}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
                     {loading ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            分析中...
+                        </>
                     ) : (
-                        <RefreshCw className="w-4 h-4" />
+                        <>
+                            <Play className="w-4 h-4" />
+                            {loaded ? '重新分析' : '开始分析'}
+                        </>
                     )}
-                    刷新数据
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-4 dark:border-green-500/30 dark:bg-green-500/10">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{bullishCount}</p>
-                            <p className="text-sm text-green-600/70 dark:text-green-400/70">多头趋势</p>
+            {loading && (
+                <div className="card">
+                    <div className="p-8">
+                        <div className="flex flex-col items-center justify-center">
+                            <div className="relative w-16 h-16 mb-4">
+                                <svg className="w-16 h-16 -rotate-90" viewBox="0 0 100 100">
+                                    <circle
+                                        cx="50"
+                                        cy="50"
+                                        r="45"
+                                        fill="none"
+                                        stroke="#e2e8f0"
+                                        strokeWidth="8"
+                                    />
+                                    <circle
+                                        cx="50"
+                                        cy="50"
+                                        r="45"
+                                        fill="none"
+                                        stroke="#3b82f6"
+                                        strokeWidth="8"
+                                        strokeDasharray={`${progress * 2.83} 283`}
+                                        strokeLinecap="round"
+                                        className="transition-all duration-300"
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-lg font-bold text-blue-600">{Math.round(progress)}%</span>
+                                </div>
+                            </div>
+                            <p className="text-slate-500 dark:text-slate-400">正在扫描市场数据...</p>
+                            <p className="text-sm text-slate-400 mt-2">基于 MA 排列和资金流向分析</p>
                         </div>
                     </div>
                 </div>
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 dark:border-red-500/30 dark:bg-red-500/10">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
-                            <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-red-700 dark:text-red-400">{bearishCount}</p>
-                            <p className="text-sm text-red-600/70 dark:text-red-400/70">空头趋势</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/50">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                            <Minus className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">{neutralCount}</p>
-                            <p className="text-sm text-slate-600/70 dark:text-slate-400/70">中性趋势</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            )}
 
-            <div className="card">
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="搜索股票名称或代码..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-slate-400" />
-                        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-                            <button
-                                onClick={() => setFilterBullish(null)}
-                                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                                    filterBullish === null
-                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
-                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                                }`}
-                            >
-                                全部
-                            </button>
-                            <button
-                                onClick={() => setFilterBullish(true)}
-                                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                                    filterBullish === true
-                                        ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
-                                        : 'text-slate-500 dark:text-slate-400 hover:text-green-600 dark:hover:text-green-400'
-                                }`}
-                            >
-                                多头
-                            </button>
-                            <button
-                                onClick={() => setFilterBullish(false)}
-                                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                                    filterBullish === false
-                                        ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'
-                                        : 'text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400'
-                                }`}
-                            >
-                                空头
-                            </button>
+            {!loading && !loaded && (
+                <div className="card">
+                    <div className="p-12 text-center">
+                        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
+                            <TrendingUp className="w-10 h-10 text-blue-600 dark:text-blue-400" />
                         </div>
-                        {(searchTerm || filterBullish !== null) && (
-                            <button
-                                onClick={() => { setSearchTerm(''); setFilterBullish(null) }}
-                                className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                            >
-                                <X className="w-4 h-4 text-slate-400" />
-                            </button>
-                        )}
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">准备分析</h2>
+                        <p className="text-slate-500 dark:text-slate-400 mb-6">
+                            点击上方「开始分析」按钮，系统将基于 MA 排列趋势分析扫描市场，筛选出潜在的中线趋势股。
+                        </p>
+                        <div className="flex flex-wrap justify-center gap-4 text-sm text-slate-500">
+                            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full">MA 排列分析</span>
+                            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full">资金流向</span>
+                            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full">趋势强度</span>
+                        </div>
                     </div>
                 </div>
+            )}
 
-                {loading ? (
-                    <div className="flex items-center justify-center py-16 text-slate-400">
-                        <RefreshCw className="w-6 h-6 animate-spin mr-3" />
-                        <span className="text-sm">加载中...</span>
-                    </div>
-                ) : error ? (
-                    <div className="py-16 text-center">
-                        <p className="text-slate-500 dark:text-slate-400">{error}</p>
+            {error && (
+                <div className="card bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30">
+                    <div className="p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
+                            <X className="w-5 h-5 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div>
+                            <p className="font-semibold text-red-700 dark:text-red-400">获取数据失败</p>
+                            <p className="text-sm text-red-600 dark:text-red-500">{error}</p>
+                        </div>
                         <button
-                            onClick={handleRefresh}
-                            className="mt-4 text-blue-600 hover:underline dark:text-blue-400"
+                            onClick={fetchRecommendations}
+                            className="ml-auto px-3 py-1.5 text-sm text-red-700 bg-red-100 dark:bg-red-500/20 rounded-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors"
                         >
                             重试
                         </button>
                     </div>
-                ) : filteredRecommendations.length === 0 ? (
-                    <div className="py-16 text-center">
-                        <p className="text-slate-500 dark:text-slate-400">
-                            {searchTerm || filterBullish !== null ? '没有匹配的股票' : '暂无推荐数据'}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-3">
-                        {filteredRecommendations.map((item, index) => (
-                            <div
-                                key={item.symbol}
-                                onClick={() => handleSymbolSelect(item.symbol)}
-                                className="flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800 cursor-pointer hover:border-blue-300 dark:hover:border-blue-500/50 hover:bg-blue-50/50 dark:hover:bg-blue-500/5 transition-all group"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                                        {index + 1}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                                {item.name}
-                                            </span>
-                                            <span className="text-xs text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700">
-                                                {item.symbol}
-                                            </span>
-                                        </div>
-                                        {item.industry && (
-                                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                                {item.industry}
-                                            </p>
-                                        )}
-                                    </div>
+                </div>
+            )}
+
+            {loaded && !error && (
+                <>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-4 dark:border-green-500/30 dark:bg-green-500/10">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
+                                    <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
                                 </div>
-
-                                <div className="flex items-center gap-6">
-                                    <div className="text-right">
-                                        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                                            {item.price !== undefined ? `¥${item.price.toFixed(2)}` : '--'}
-                                        </p>
-                                        {item.change !== undefined && (
-                                            <p className={`text-xs ${item.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                                {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        {getTrendIcon(item.is_bullish)}
-                                        <span className={`text-sm px-3 py-1 rounded-full ${getTrendClass(item.is_bullish)}`}>
-                                            {getTrendLabel(item.is_bullish)}
-                                        </span>
-                                    </div>
-
-                                    <ArrowRight className="w-5 h-5 text-slate-300 dark:text-slate-600 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" />
+                                <div>
+                                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">{bullishCount}</p>
+                                    <p className="text-sm text-green-600/70 dark:text-green-400/70">多头趋势</p>
                                 </div>
                             </div>
-                        ))}
+                        </div>
+                        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 dark:border-red-500/30 dark:bg-red-500/10">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
+                                    <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-red-700 dark:text-red-400">{bearishCount}</p>
+                                    <p className="text-sm text-red-600/70 dark:text-red-400/70">空头趋势</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                                    <Minus className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">{neutralCount}</p>
+                                    <p className="text-sm text-slate-600/70 dark:text-slate-400/70">中性趋势</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                )}
-            </div>
 
-            <div className="text-center text-xs text-slate-400">
-                数据基于 MA 排列趋势扫描，仅供参考，不构成投资建议
-            </div>
+                    <div className="card">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="relative flex-1 max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="搜索股票名称或代码..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Filter className="w-4 h-4 text-slate-400" />
+                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+                                    <button
+                                        onClick={() => setFilterBullish(null)}
+                                        className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                                            filterBullish === null
+                                                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        全部
+                                    </button>
+                                    <button
+                                        onClick={() => setFilterBullish(true)}
+                                        className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                                            filterBullish === true
+                                                ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 shadow-sm'
+                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        多头
+                                    </button>
+                                    <button
+                                        onClick={() => setFilterBullish(false)}
+                                        className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                                            filterBullish === false
+                                                ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 shadow-sm'
+                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        空头
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            {filteredRecommendations.length > 0 ? (
+                                filteredRecommendations.map((stock) => (
+                                    <div
+                                        key={stock.symbol}
+                                        onClick={() => handleSymbolSelect(stock.symbol)}
+                                        className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-all cursor-pointer group"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${getTrendClass(stock.is_bullish)}`}>
+                                                {getTrendIcon(stock.is_bullish)}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold text-slate-900 dark:text-slate-100">{stock.name}</span>
+                                                    <span className="text-sm text-slate-400 dark:text-slate-500">{stock.symbol}</span>
+                                                </div>
+                                                {stock.industry && (
+                                                    <span className="text-xs text-slate-500 dark:text-slate-400">{stock.industry}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-right">
+                                                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                                    {typeof stock.price === 'number' && stock.price > 0 
+                                                        ? stock.price.toFixed(2) 
+                                                        : '--'}
+                                                </p>
+                                                {stock.change !== undefined && (
+                                                    <p className={`text-sm ${stock.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="py-12 text-center">
+                                    <p className="text-slate-500 dark:text-slate-400">暂无符合条件的股票</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     )
 }

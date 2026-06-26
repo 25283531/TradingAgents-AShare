@@ -111,9 +111,9 @@ interface EdgeDef {
 
 const EDGE_DEFS: EdgeDef[] = [
     // 数据源 → 多空研究员
-    ...['Market Analyst', 'Social Analyst', 'News Analyst', 'Fundamentals Analyst', 'Macro Analyst', 'Smart Money Analyst', 'Volume Price Analyst']
+    ...['Market Analyst', 'Social Analyst', 'News Analyst', 'Fundamentals Analyst', 'Macro Analyst', 'Smart Money Analyst', 'Volume Price Analyst', 'Sector Rotation Analyst', 'Anti-Quant Trap Analyst']
         .map(s => ({ source: s, target: 'Bull Researcher', thin: true } as EdgeDef)),
-    ...['Market Analyst', 'Social Analyst', 'News Analyst', 'Fundamentals Analyst', 'Macro Analyst', 'Smart Money Analyst', 'Volume Price Analyst']
+    ...['Market Analyst', 'Social Analyst', 'News Analyst', 'Fundamentals Analyst', 'Macro Analyst', 'Smart Money Analyst', 'Volume Price Analyst', 'Sector Rotation Analyst', 'Anti-Quant Trap Analyst']
         .map(s => ({ source: s, target: 'Bear Researcher', thin: true } as EdgeDef)),
     // 多空辩论（双向）
     { source: 'Bull Researcher', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', bidirectional: true },
@@ -432,7 +432,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
             </div>
 
             {/* React Flow 画布 */}
-            <div className="w-full h-full min-h-[400px]">
+            <div className="w-full" style={{ height: '520px' }}>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -451,9 +451,8 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
                     minZoom={0.3}
                     maxZoom={2}
                     preventScrolling={false}
-                    fitView
+                    fitView={{ padding: 20 }}
                     translateExtent={[[-40, -40], [1730, 900]]}
-                    proOptions={{ hideAttribution: true }}
                 />
             </div>
         </section>

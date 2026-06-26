@@ -62,12 +62,6 @@ export default function Discovery() {
         return <Minus className="w-5 h-5 text-slate-400" />
     }
 
-    const getTrendLabel = (isBullish: boolean | undefined) => {
-        if (isBullish === true) return '多头'
-        if (isBullish === false) return '空头'
-        return '中性'
-    }
-
     const getTrendClass = (isBullish: boolean | undefined) => {
         if (isBullish === true) return 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'
         if (isBullish === false) return 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'

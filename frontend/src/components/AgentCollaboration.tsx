@@ -451,7 +451,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
                     minZoom={0.3}
                     maxZoom={2}
                     preventScrolling={false}
-                    fitView={{ padding: 20 }}
+                    fitView={true}
                     translateExtent={[[-40, -40], [1730, 900]]}
                 />
             </div>

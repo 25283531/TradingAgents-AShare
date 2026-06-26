@@ -100,8 +100,8 @@ export default function Analysis() {
                     </div>
                 </aside>
 
-                <div className="min-w-0 space-y-4">
-                    <div className="h-[360px]">
+                <div className="min-w-0 flex flex-col gap-4">
+                    <div className="h-[360px] flex-shrink-0">
                         <KlinePanel
                             symbol={activeSymbol}
                             onSymbolChange={(symbol) => {
@@ -110,9 +110,11 @@ export default function Analysis() {
                         />
                     </div>
 
-                    <AgentCollaboration onSelectSection={handleShowReport} onOpenDebate={setDebateDrawer} selectedSection={activeSection} />
+                    <div className="flex-1 min-h-[400px]">
+                        <AgentCollaboration onSelectSection={handleShowReport} onOpenDebate={setDebateDrawer} selectedSection={activeSection} />
+                    </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 flex-shrink-0">
                         <DecisionCard
                             symbol={activeSymbol}
                             report={report || undefined}
@@ -127,7 +129,7 @@ export default function Analysis() {
                         <KeyMetrics items={keyMetrics} />
                     </div>
 
-                    <div ref={reportRef}>
+                    <div ref={reportRef} className="flex-shrink-0">
                         <ReportViewer activeSection={activeSection} />
                     </div>
                 </div>

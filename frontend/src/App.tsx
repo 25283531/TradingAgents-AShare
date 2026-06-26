@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
+import Discovery from './pages/Discovery'
 import Analysis from './pages/Analysis'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
@@ -55,6 +56,7 @@ function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/discovery" element={<Discovery />} />
                   <Route path="/tracking-board" element={<TrackingBoard />} />
                   <Route path="/analysis" element={<Analysis />} />
                   <Route path="/reports" element={<Reports />} />

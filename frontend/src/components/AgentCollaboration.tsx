@@ -41,6 +41,8 @@ const META: AgentMeta[] = [
     { name: 'Macro Analyst', label: '宏观', goal: '板块轮动与政策驱动分析', section: 'macro_report', Icon: BarChart2, badgeBg: 'bg-violet-100 dark:bg-violet-500/20', badgeText: 'text-violet-600 dark:text-violet-400' },
     { name: 'Smart Money Analyst', label: '主力资金', goal: '机构资金行为与龙虎榜', section: 'smart_money_report', Icon: DollarSign, badgeBg: 'bg-amber-100 dark:bg-amber-500/20', badgeText: 'text-amber-600 dark:text-amber-400' },
     { name: 'Volume Price Analyst', label: '量价', goal: '成交量与价格形态分析', section: 'volume_price_report', Icon: Activity, badgeBg: 'bg-rose-100 dark:bg-rose-500/20', badgeText: 'text-rose-600 dark:text-rose-400' },
+    { name: 'Sector Rotation Analyst', label: '行业轮动', goal: '市场主线与板块轮动趋势', section: 'sector_report', Icon: ArrowBigUp, badgeBg: 'bg-lime-100 dark:bg-lime-500/20', badgeText: 'text-lime-600 dark:text-lime-400' },
+    { name: 'Anti-Quant Trap Analyst', label: '防量化陷阱', goal: '识别量化控盘与短线收割风险', section: 'anti_quant_report', Icon: Shield, badgeBg: 'bg-slate-100 dark:bg-slate-500/20', badgeText: 'text-slate-600 dark:text-slate-400' },
     { name: 'Bull Researcher', label: '多头', goal: '评估投资价值与上行潜力', section: 'investment_plan', debate: 'research', Icon: ArrowBigUp, badgeBg: 'bg-emerald-100 dark:bg-emerald-500/20', badgeText: 'text-emerald-600 dark:text-emerald-400' },
     { name: 'Bear Researcher', label: '空头', goal: '评估下行风险与潜在危机', section: 'investment_plan', debate: 'research', Icon: ArrowBigDown, badgeBg: 'bg-rose-100 dark:bg-rose-500/20', badgeText: 'text-rose-600 dark:text-rose-400' },
     { name: 'Research Manager', label: '研究总监', goal: '综合多空论据形成投资计划', section: 'investment_plan', debate: 'research', Icon: Brain, badgeBg: 'bg-indigo-100 dark:bg-indigo-500/20', badgeText: 'text-indigo-600 dark:text-indigo-400' },
@@ -69,25 +71,27 @@ const VERDICT_COLORS: Record<string, string> = {
 
 const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
     // 左列：数据源分析师
-    'Market Analyst':       { x: 0, y: 0 },
-    'Social Analyst':       { x: 0, y: 105 },
-    'News Analyst':         { x: 0, y: 210 },
-    'Fundamentals Analyst': { x: 0, y: 315 },
-    'Macro Analyst':        { x: 0, y: 420 },
-    'Smart Money Analyst':  { x: 0, y: 525 },
-    'Volume Price Analyst': { x: 0, y: 630 },
+    'Market Analyst':           { x: 0, y: 0 },
+    'Social Analyst':           { x: 0, y: 95 },
+    'News Analyst':             { x: 0, y: 190 },
+    'Fundamentals Analyst':     { x: 0, y: 285 },
+    'Macro Analyst':            { x: 0, y: 380 },
+    'Smart Money Analyst':      { x: 0, y: 475 },
+    'Volume Price Analyst':     { x: 0, y: 570 },
+    'Sector Rotation Analyst':  { x: 0, y: 665 },
+    'Anti-Quant Trap Analyst':  { x: 0, y: 760 },
     // 研究团队（靠近左侧分析师）
-    'Bull Researcher':      { x: 470, y: 80 },
-    'Research Manager':     { x: 630, y: 240 },
-    'Bear Researcher':      { x: 470, y: 400 },
+    'Bull Researcher':          { x: 470, y: 70 },
+    'Research Manager':         { x: 630, y: 220 },
+    'Bear Researcher':          { x: 470, y: 370 },
     // 交易员
-    'Trader':               { x: 890, y: 240 },
+    'Trader':                   { x: 890, y: 220 },
     // 风控团队
-    'Aggressive Analyst':   { x: 1180, y: 80 },
-    'Neutral Analyst':      { x: 1180, y: 240 },
-    'Conservative Analyst': { x: 1180, y: 400 },
+    'Aggressive Analyst':       { x: 1180, y: 70 },
+    'Neutral Analyst':          { x: 1180, y: 220 },
+    'Conservative Analyst':     { x: 1180, y: 370 },
     // 组合经理
-    'Portfolio Manager':    { x: 1470, y: 240 },
+    'Portfolio Manager':        { x: 1470, y: 220 },
 }
 
 // 需要额外 handle 的节点（用于辩论连线）
@@ -428,7 +432,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
             </div>
 
             {/* React Flow 画布 */}
-            <div className="h-[700px] w-full">
+            <div className="w-full h-full min-h-[400px]">
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -441,11 +445,14 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
                     edgesFocusable={false}
                     panOnDrag
                     panOnScroll={false}
-                    zoomOnScroll={false}
-                    zoomOnPinch={false}
+                    zoomOnScroll={true}
+                    zoomOnPinch={true}
                     zoomOnDoubleClick={false}
+                    minZoom={0.3}
+                    maxZoom={2}
                     preventScrolling={false}
-                    translateExtent={[[-40, -40], [1730, 660]]}
+                    fitView
+                    translateExtent={[[-40, -40], [1730, 900]]}
                     proOptions={{ hideAttribution: true }}
                 />
             </div>

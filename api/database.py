@@ -8,8 +8,8 @@ from typing import Generator
 from sqlalchemy import Boolean, create_engine, Column, String, DateTime, Text, Integer, Float, JSON, UniqueConstraint, Index, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
-# Database URL - default to SQLite for simplicity
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./tradingagents.db")
+# Database URL - default to SQLite under ./data for Docker volume compatibility
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/tradingagents.db")
 
 # Create engine
 if DATABASE_URL.startswith("sqlite"):

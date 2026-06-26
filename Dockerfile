@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# 创建数据目录（用于 SQLite 数据库持久化）
+RUN mkdir -p /app/data
+
 # 利用 uv 同步依赖（uv 在多架构环境下依然非常快）
 # 先只装第三方依赖（利用 Docker 层缓存）
 COPY pyproject.toml uv.lock ./

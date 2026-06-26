@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '@/services/api'
 import { useAnalysisStore } from '@/stores/analysisStore'
 import { useAuthStore } from '@/stores/authStore'
-import DiscoveryPanel from '@/components/DiscoveryPanel'
 import type { JobStatus, Report, TrackingBoardResponse } from '@/types'
 
 export default function Dashboard() {
@@ -85,14 +84,9 @@ export default function Dashboard() {
         }
     }
 
-    const handleSymbolSelect = (symbol: string) => {
-        navigate(`/analysis?symbol=${symbol}`)
-    }
-
     return (
-        <div className="flex gap-6">
-            <div className="flex-1 space-y-6">
-                {dashboardError && (
+        <div className="space-y-6">
+            {dashboardError && (
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
                         {dashboardError}
                     </div>
@@ -390,10 +384,7 @@ export default function Dashboard() {
                         </div>
                     </div>
                 )}
-            </div>
         </div>
-        <DiscoveryPanel onSymbolSelect={handleSymbolSelect} />
-    </div>
 )
 }
 

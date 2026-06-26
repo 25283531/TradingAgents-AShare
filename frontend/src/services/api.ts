@@ -19,45 +19,59 @@ function getAuthToken(): string | null {
 }
 
 class ApiService {
-    private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    private async request<T>(endpoint: string, options?: RequestInit, timeoutMs = 30000): Promise<T> {
         const url = `${getBaseUrl()}${endpoint}`
         const token = getAuthToken()
-        const response = await fetch(url, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                ...options?.headers,
-            },
-        })
 
-        if (!response.ok) {
-            const contentType = response.headers.get('content-type') || ''
-            if (contentType.includes('application/json')) {
-                const data = await response.json().catch(() => null)
-                const detail = data?.detail || data?.message
-                throw new Error(detail || `HTTP error! status: ${response.status}`)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    ...options?.headers,
+                },
+            })
+
+            if (!response.ok) {
+                const contentType = response.headers.get('content-type') || ''
+                if (contentType.includes('application/json')) {
+                    const data = await response.json().catch(() => null)
+                    const detail = data?.detail || data?.message
+                    throw new Error(detail || `HTTP error! status: ${response.status}`)
+                }
+                const error = await response.text()
+                throw new Error(error || `HTTP error! status: ${response.status}`)
             }
-            const error = await response.text()
-            throw new Error(error || `HTTP error! status: ${response.status}`)
-        }
 
-        if (response.status === 204 || response.status === 205) {
-            return undefined as T
-        }
+            if (response.status === 204 || response.status === 205) {
+                return undefined as T
+            }
 
-        const contentType = response.headers.get('content-type') || ''
-        if (!contentType.includes('application/json')) {
-            const text = await response.text()
-            return (text ? (text as T) : undefined) as T
-        }
+            const contentType = response.headers.get('content-type') || ''
+            if (!contentType.includes('application/json')) {
+                const text = await response.text()
+                return (text ? (text as T) : undefined) as T
+            }
 
-        const raw = await response.text()
-        if (!raw) {
-            return undefined as T
-        }
+            const raw = await response.text()
+            if (!raw) {
+                return undefined as T
+            }
 
-        return JSON.parse(raw) as T
+            return JSON.parse(raw) as T
+        } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                throw new Error(`请求超时，请稍后重试`)
+            }
+            throw err
+        } finally {
+            clearTimeout(timeoutId)
+        }
     }
 
     async startAnalysis(request: AnalysisRequest): Promise<AnalysisResponse> {

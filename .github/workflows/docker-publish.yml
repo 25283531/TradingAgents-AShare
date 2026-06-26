@@ -58,7 +58,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/tradingagents-ashare:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/tradingagents-ashare:latest
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}

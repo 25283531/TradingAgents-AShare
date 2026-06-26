@@ -87,6 +87,7 @@ export default function KlinePanel({ symbol, onSymbolChange }: KlinePanelProps) 
     const [candles, setCandles] = useState<KlineCandle[]>([])
     const [activeCandle, setActiveCandle] = useState<KlineCandle | null>(null)
     const candlesRef = useRef<KlineCandle[]>([])
+    const [chartReady, setChartReady] = useState(false)
 
     const range = useMemo(() => {
         const end = new Date()
@@ -161,6 +162,8 @@ export default function KlinePanel({ symbol, onSymbolChange }: KlinePanelProps) 
 
         chartRef.current = chart
         seriesRef.current = series
+        setChartReady(true)
+        
         if (candlesRef.current.length) {
             const existingData: CandlestickData[] = candlesRef.current.flatMap((c) => {
                 const time = toBusinessDay((c.date || '').slice(0, 10))
@@ -260,7 +263,7 @@ export default function KlinePanel({ symbol, onSymbolChange }: KlinePanelProps) 
         return () => {
             cancelled = true
         }
-    }, [range.end, range.start, symbol])
+    }, [range.end, range.start, symbol, chartReady])
 
     const panelCandle = activeCandle ?? (candles.length ? candles[candles.length - 1] : null)
     const panelChange = panelCandle?.change ?? (panelCandle ? panelCandle.close - panelCandle.open : null)

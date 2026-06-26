@@ -142,13 +142,13 @@ export default function ChatCopilotPanel({ onSymbolDetected, onShowReport, initi
     const selectedAnalysts = (() => {
         try {
             const stored = localStorage.getItem('tradingagents-settings')
-            if (!stored) return ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price']
+            if (!stored) return ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap']
             const parsed = JSON.parse(stored) as { defaultAnalysts?: string[] }
             if (Array.isArray(parsed.defaultAnalysts) && parsed.defaultAnalysts.length > 0) {
                 return parsed.defaultAnalysts
             }
         } catch {}
-        return ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price']
+        return ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap']
     })()
     // track which section IDs have been added to chatMessages and whether they're done
     const streamingReportIds = useRef<Map<string, boolean>>(new Map()) // section → isComplete

@@ -1,6 +1,9 @@
 import asyncio
+import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
+
+_logger = logging.getLogger(__name__)
 from tradingagents.dataflows.config import get_config
 from tradingagents.prompts import get_prompt
 from tradingagents.graph.intent_parser import build_horizon_context
@@ -48,6 +51,13 @@ def create_smart_money_analyst(llm, data_collector=None):
                 })
             )
             fund_flow, lhb, volume = results
+
+        _logger.debug(
+            "[Smart Money Analyst] fund_flow data length=%d chars, lhb data length=%d chars, volume data=%s",
+            len(str(fund_flow)),
+            len(str(lhb)),
+            volume,
+        )
 
         messages = [
             SystemMessage(content=(

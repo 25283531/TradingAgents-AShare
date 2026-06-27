@@ -196,6 +196,8 @@ export default function Settings() {
         localStorage.setItem('tradingagents-settings', JSON.stringify({
             defaultAnalysts,
             customPrompt,
+            maxDebateRounds,
+            maxRiskRounds,
         }))
         localStorage.setItem('ta-custom-prompt', customPrompt)
     }

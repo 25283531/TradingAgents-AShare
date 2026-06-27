@@ -100,6 +100,7 @@ class ApiService {
         messages: Array<{ role: string; content: string }>,
         stream = true,
         selectedAnalysts?: string[],
+        configOverrides?: Record<string, any>,
     ) {
         const response = await fetch(`${getBaseUrl()}/v1/chat/completions`, {
             method: 'POST',
@@ -111,6 +112,7 @@ class ApiService {
                 messages,
                 stream,
                 selected_analysts: selectedAnalysts,
+                config_overrides: configOverrides,
             }),
         })
 

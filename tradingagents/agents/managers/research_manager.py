@@ -21,6 +21,8 @@ def create_research_manager(llm, memory):
         fundamentals_report = state["fundamentals_report"]
         smart_money_report = state.get("smart_money_report", "")
         volume_price_report = state.get("volume_price_report", "")
+        sector_report = state.get("sector_report", "")
+        anti_quant_report = state.get("anti_quant_report", "")
 
         investment_debate_state = state["investment_debate_state"]
         claims = investment_debate_state.get("claims", [])
@@ -43,6 +45,8 @@ def create_research_manager(llm, memory):
             history=history,
             smart_money_report=smart_money_report,
             volume_price_report=volume_price_report,
+            sector_report=sector_report,
+            anti_quant_report=anti_quant_report,
             sentiment_report=sentiment_report,
             claims_text=claims_text,
             unresolved_claims_text=unresolved_claims_text,

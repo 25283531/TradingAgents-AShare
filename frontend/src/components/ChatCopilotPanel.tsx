@@ -139,16 +139,15 @@ export default function ChatCopilotPanel({ onSymbolDetected, onShowReport, initi
     const [, forceUpdate] = useState(0)
     const [expandedAgentMsgId, setExpandedAgentMsgId] = useState<string | null>(null)
     // Use global default analysts from Settings (read-only here)
-    const selectedAnalysts = (() => {
+    const [selectedAnalysts, debateConfig] = (() => {
         try {
             const stored = localStorage.getItem('tradingagents-settings')
-            if (!stored) return ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap']
-            const parsed = JSON.parse(stored) as { defaultAnalysts?: string[] }
-            if (Array.isArray(parsed.defaultAnalysts) && parsed.defaultAnalysts.length > 0) {
-                return parsed.defaultAnalysts
-            }
+            if (!stored) return [['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap'], { max_debate_rounds: 1, max_risk_discuss_rounds: 1 }]
+            const parsed = JSON.parse(stored) as { defaultAnalysts?: string[], maxDebateRounds?: number, maxRiskRounds?: number }
+            const analysts = Array.isArray(parsed.defaultAnalysts) && parsed.defaultAnalysts.length > 0 ? parsed.defaultAnalysts : ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap']
+            return [analysts, { max_debate_rounds: parsed.maxDebateRounds || 1, max_risk_discuss_rounds: parsed.maxRiskRounds || 1 }]
         } catch {}
-        return ['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap']
+        return [['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap'], { max_debate_rounds: 1, max_risk_discuss_rounds: 1 }]
     })()
     // track which section IDs have been added to chatMessages and whether they're done
     const streamingReportIds = useRef<Map<string, boolean>>(new Map()) // section → isComplete
@@ -552,6 +551,7 @@ export default function ChatCopilotPanel({ onSymbolDetected, onShowReport, initi
             [{ role: 'user', content: prompt }],
             true,
             selectedAnalysts,
+            debateConfig,
         )
 
         if (!response.body) throw new Error('SSE stream unavailable')

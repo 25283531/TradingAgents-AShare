@@ -669,7 +669,7 @@ class AnalyzeRequest(UserContextInput):
     symbol: str = Field(default="", description="股票代码，如 600519.SH（当 query 包含代码时可省略）")
     trade_date: str = Field(default_factory=cn_today_str, description="交易日期 YYYY-MM-DD")
     selected_analysts: List[str] = Field(
-        default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price"]
+        default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price", "sector_rotation", "anti_quant_trap"]
     )
     config_overrides: Dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
@@ -734,7 +734,7 @@ class ChatCompletionRequest(UserContextInput):
     messages: List[ChatMessage]
     stream: bool = True
     selected_analysts: List[str] = Field(
-        default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price"]
+        default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price", "sector_rotation", "anti_quant_trap"]
     )
     config_overrides: Dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
@@ -909,7 +909,7 @@ class UserRuntimeConfigResponse(BaseModel):
     server_fallback_enabled: bool = True
     email_report_enabled: bool = True
     wecom_report_enabled: bool = True
-    default_analysts: List[str] = Field(default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price"])
+    default_analysts: List[str] = Field(default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price", "sector_rotation", "anti_quant_trap"])
 
 
 class UserRuntimeConfigUpdateRequest(BaseModel):

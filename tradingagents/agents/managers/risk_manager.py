@@ -23,6 +23,8 @@ def create_risk_manager(llm, memory):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         sentiment_report = state["sentiment_report"]
+        sector_report = state.get("sector_report", "")
+        anti_quant_report = state.get("anti_quant_report", "")
         trader_plan = state["trader_investment_plan"]
         risk_feedback_state = state.get("risk_feedback_state", {})
 
@@ -42,6 +44,8 @@ def create_risk_manager(llm, memory):
             history=history,
             market_context_summary=context_view["market_context_summary"],
             user_context_summary=context_view["user_context_summary"],
+            sector_report=sector_report,
+            anti_quant_report=anti_quant_report,
             claims_text=format_claims_for_prompt(claims, empty_message="当前没有已登记风控 claim。"),
             unresolved_claims_text=format_claim_subset_for_prompt(claims, unresolved_claim_ids),
             round_summary=risk_debate_state.get("round_summary", "暂无风险轮次摘要。"),

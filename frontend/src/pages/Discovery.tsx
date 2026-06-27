@@ -1,7 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TrendingUp, TrendingDown, Minus, ArrowRight, RefreshCw, Search, Filter, X, Play } from 'lucide-react'
-import { api } from '@/services/api'
 import type { Recommendation } from '@/types'
 
 export default function Discovery() {
@@ -12,8 +11,12 @@ export default function Discovery() {
     const [searchTerm, setSearchTerm] = useState('')
     const [filterBullish, setFilterBullish] = useState<boolean | null>(null)
     const [progress, setProgress] = useState(0)
+    const [logs, setLogs] = useState<string[]>([])
     const navigate = useNavigate()
-    const isMountedRef = useRef(true)
+
+    const addLog = (message: string) => {
+        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`])
+    }
 
     const fetchRecommendations = () => {
         if (loading) return
@@ -21,35 +24,52 @@ export default function Discovery() {
         setLoading(true)
         setError(null)
         setProgress(0)
+        setLogs([])
         
-        const progressInterval = setInterval(() => {
-            setProgress(prev => {
-                if (prev >= 90) return 90
-                return prev + Math.random() * 15
-            })
-        }, 500)
+        addLog('开始获取中线趋势股推荐...')
 
-        api.getRecommendations()
-            .then(res => {
-                if (isMountedRef.current) {
-                    setRecommendations(res.stocks)
+        // 使用 SSE 获取实时进度
+        const eventSource = new EventSource('/api/recommendation/stream')
+        
+        eventSource.onmessage = (event) => {
+            if (event.data === '[DONE]') {
+                eventSource.close()
+                return
+            }
+            
+            try {
+                const data = JSON.parse(event.data)
+                
+                if (data.type === 'log') {
+                    addLog(data.message)
+                } else if (data.type === 'progress') {
+                    setProgress(data.percent)
+                    addLog(`${data.step} (${data.current}/${data.total})`)
+                } else if (data.type === 'result') {
+                    addLog(`获取到 ${data.stocks.length} 只推荐股票`)
+                    setRecommendations(data.stocks)
                     setLoaded(true)
                     setProgress(100)
-                }
-            })
-            .catch(err => {
-                if (isMountedRef.current) {
-                    console.error('Failed to load recommendations:', err)
-                    setError('获取推荐数据失败，请检查网络连接')
-                }
-            })
-            .finally(() => {
-                clearInterval(progressInterval)
-                if (isMountedRef.current) {
                     setLoading(false)
-                    setProgress(100)
+                    eventSource.close()
+                } else if (data.type === 'error') {
+                    addLog(`错误: ${data.message}`)
+                    setError(data.message)
+                    setLoading(false)
+                    eventSource.close()
                 }
-            })
+            } catch (e) {
+                console.error('Failed to parse SSE data:', e)
+            }
+        }
+        
+        eventSource.onerror = (error) => {
+            console.error('SSE error:', error)
+            addLog('连接错误，请重试')
+            setError('获取推荐数据失败，请检查网络连接')
+            setLoading(false)
+            eventSource.close()
+        }
     }
 
     const handleSymbolSelect = (symbol: string) => {
@@ -140,6 +160,23 @@ export default function Discovery() {
                             </div>
                             <p className="text-slate-500 dark:text-slate-400">正在扫描市场数据...</p>
                             <p className="text-sm text-slate-400 mt-2">基于 MA 排列和资金流向分析</p>
+                        </div>
+                        
+                        <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                            <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                                <span className="text-sm font-medium text-slate-600 dark:text-slate-300">选股流程日志</span>
+                            </div>
+                            <div className="p-4 h-48 overflow-y-auto font-mono text-sm space-y-1">
+                                {logs.map((log, index) => (
+                                    <div key={index} className="text-slate-600 dark:text-slate-400">
+                                        {log}
+                                    </div>
+                                ))}
+                                {logs.length === 0 && (
+                                    <div className="text-slate-400">等待日志...</div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -317,6 +354,24 @@ export default function Discovery() {
                             )}
                         </div>
                     </div>
+
+                    {logs.length > 0 && (
+                        <div className="card">
+                            <div className="border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">选股流程日志</span>
+                                </div>
+                                <div className="p-4 h-48 overflow-y-auto font-mono text-sm space-y-1">
+                                    {logs.map((log, index) => (
+                                        <div key={index} className="text-slate-600 dark:text-slate-400">
+                                            {log}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>

@@ -137,7 +137,7 @@ class StockFilter:
         return {"pass": True, "reason": f"趋势状态{trend_status}，强度{trend_strength}", "value": trend_status}
 
 
-def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optional[str] = None, filter_config: Optional[Dict[str, Any]] = None) -> list[Dict[str, Any]]:
+def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optional[str] = None, filter_config: Optional[Dict[str, Any]] = None, progress_callback=None) -> list[Dict[str, Any]]:
     """获取经过硬过滤的股票候选列表。
 
     Args:
@@ -145,16 +145,28 @@ def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optio
         top_n: 返回的股票数量
         analysis_date: 分析日期（格式：YYYY-MM-DD），用于历史数据复盘，默认使用当前日期
         filter_config: 过滤配置参数
+        progress_callback: 可选的进度回调函数，签名 (step: str, current: int, total: int) -> None
     """
     candidates = []
 
+    def _notify(step: str, current: int = 0, total: int = 0):
+        if progress_callback:
+            try:
+                progress_callback(step, current, total)
+            except Exception:
+                pass
+
+    _notify("fetching_hot_stocks", 0, 0)
     try:
         hot_stocks = _fetch_hot_stocks(data_provider)
+        # 只取前5只热门股票，减少后续数据获取量
+        hot_stocks = hot_stocks[:5]
         for stock in hot_stocks:
             candidates.append(stock)
     except Exception:
         pass
 
+    _notify("fetching_sector_leaders", 0, 0)
     try:
         sector_leaders = _fetch_sector_leaders(data_provider)
         for stock in sector_leaders:
@@ -169,15 +181,23 @@ def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optio
     if analysis_date is None:
         analysis_date = datetime.now().strftime("%Y-%m-%d")
 
-    for stock in candidates:
-        _enrich_stock_data(data_provider, stock, analysis_date)
+    # 只取前8只候选股票进行详细数据获取
+    candidates = candidates[:8]
+    total = len(candidates)
+    _notify("enriching_data", 0, total)
 
+    for i, stock in enumerate(candidates):
+        _enrich_stock_data(data_provider, stock, analysis_date)
+        _notify("enriching_data", i + 1, total)
+
+    _notify("filtering", 0, 0)
     filtered = StockFilter(filter_config).filter_stocks(candidates)
 
     # 如果过滤后为空，返回演示数据
     if not filtered:
         return _get_demo_candidates(top_n)
 
+    _notify("sorting", 0, 0)
     filtered_sorted = sorted(
         filtered,
         key=lambda x: (
@@ -188,6 +208,7 @@ def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optio
         reverse=True,
     )
 
+    _notify("done", 0, 0)
     return filtered_sorted[:top_n]
 
 
@@ -209,7 +230,11 @@ def _get_demo_candidates(top_n: int = 10) -> list[Dict[str, Any]]:
 
 
 def _fetch_hot_stocks(data_provider) -> list[Dict[str, Any]]:
-    """获取热门股票列表（雪球热搜）。"""
+    """获取热门股票列表（雪球热搜）。
+
+    数据格式（4列）：股票代码 股票简称 关注数 最新价
+    示例：SH600519 XD贵州茅 3664982.0 1168.63
+    """
     try:
         result = data_provider.get_hot_stocks_xq()
         lines = result.strip().split("\n")
@@ -228,12 +253,15 @@ def _fetch_hot_stocks(data_provider) -> list[Dict[str, Any]]:
             if len(parts) >= 2:
                 symbol = parts[0].strip()
                 name = parts[1].strip()
+                # 数据格式：股票代码 股票简称 关注数 最新价
+                # 取最后一个字段作为价格（最新价）
                 price = 0
-                if len(parts) >= 3:
+                for p in reversed(parts[2:]):
                     try:
-                        price = float(parts[2].strip())
+                        price = float(p.strip())
+                        break
                     except ValueError:
-                        pass
+                        continue
                 stocks.append({
                     "symbol": symbol,
                     "name": name,

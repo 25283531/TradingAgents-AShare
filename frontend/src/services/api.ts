@@ -1,12 +1,9 @@
 import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, JobListResponse, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse, TradeBuyRequest, TradeSellRequest, TradeRecord, TradeSummaryResponse, PortfolioSummaryResponse } from '@/types'
 
 export function getBaseUrl(): string {
-    const envUrl = (import.meta.env.VITE_API_URL as string) || ''
-    if (envUrl) return envUrl.replace(/\/$/, '')
-    if (typeof window !== 'undefined' && window.location?.origin) {
-        return window.location.origin.replace(/\/$/, '')
-    }
-    return 'http://localhost:8000'
+    // 在开发环境使用相对路径，让 Vite 代理处理请求
+    // 在生产环境使用相对路径，自动适配部署域名
+    return ''
 }
 
 
@@ -415,7 +412,7 @@ class ApiService {
     }
 
     async getRecommendations(): Promise<{ stocks: Array<{ symbol: string; name: string; price: number; is_bullish: boolean | undefined }> }> {
-        return this.request('/api/recommendation')
+        return this.request('/api/recommendation', undefined, 120000) // 120秒超时
     }
 }
 

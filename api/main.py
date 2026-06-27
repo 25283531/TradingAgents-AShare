@@ -98,8 +98,11 @@ def _report_version_stats() -> None:
 
     def _send():
         try:
+            stats_url = os.getenv("TA_VERSION_STATS_URL")
+            if not stats_url:
+                return
             requests.post(
-                "https://gupiao.hnpds.eu.org:32123/api/version-stats",
+                stats_url,
                 json={"v": APP_VERSION, "nonce": uuid.uuid4().hex},
                 timeout=30,
             )
@@ -5087,21 +5090,52 @@ class RecommendationResponse(BaseModel):
 @app.get("/api/recommendation", response_model=RecommendationResponse)
 async def get_recommendations():
     """获取每日中线趋势股推荐（经过硬过滤）。"""
+    import asyncio
+    import concurrent.futures
+    
+    _log("[Recommendation] 开始获取中线趋势股推荐")
     try:
+        _log("[Recommendation] 步骤1: 导入模块")
         from tradingagents.dataflows.filters.stock_filters import get_filtered_candidates
         from tradingagents.dataflows.providers import build_default_registry
         
+        _log("[Recommendation] 步骤2: 构建数据提供者注册表")
         registry = build_default_registry()
+        _log(f"[Recommendation] 注册表包含 {len(registry.providers)} 个提供者")
+        
         provider = registry.get("cn_akshare")
         
         if provider is None:
-            _log("[Recommendation] cn_akshare provider not found")
+            _log("[Recommendation] 错误: cn_akshare provider 未找到")
             return {"stocks": []}
         
-        candidates = get_filtered_candidates(provider, top_n=10)
+        _log("[Recommendation] 步骤3: 获取 cn_akshare 数据提供者")
+        
+        # 使用线程池执行同步的股票筛选，带超时保护
+        _log("[Recommendation] 步骤4: 执行股票筛选逻辑（带超时保护）")
+        
+        def fetch_candidates_sync():
+            return get_filtered_candidates(provider, top_n=10)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                candidates = loop.run_in_executor(executor, fetch_candidates_sync)
+                candidates = await asyncio.wait_for(candidates, timeout=30.0)
+        except asyncio.TimeoutError:
+            _log("[Recommendation] 警告: 股票筛选超时(30秒)，返回演示数据")
+            from tradingagents.dataflows.filters.stock_filters import _get_demo_candidates
+            candidates = _get_demo_candidates(10)
+        except Exception as e:
+            _log(f"[Recommendation] 股票筛选异常: {e}")
+            from tradingagents.dataflows.filters.stock_filters import _get_demo_candidates
+            candidates = _get_demo_candidates(10)
+        
+        _log(f"[Recommendation] 筛选完成，共找到 {len(candidates)} 只候选股票")
         
         stocks = []
         code_to_name = _get_reverse_stock_map_cached_only()
+        _log(f"[Recommendation] 步骤5: 映射股票代码到名称，共 {len(code_to_name)} 条记录")
         
         for stock in candidates:
             symbol = stock.get("symbol", "")
@@ -5116,10 +5150,132 @@ async def get_recommendations():
                 "is_bullish": is_bullish,
             })
         
+        _log(f"[Recommendation] 步骤6: 返回 {len(stocks)} 只股票推荐")
         return {"stocks": stocks[:10]}
     except Exception as exc:
         _log(f"[Recommendation] Failed: {exc}")
+        import traceback
+        _log(f"[Recommendation] Stack trace: {traceback.format_exc()}")
         return {"stocks": []}
+
+
+_STEP_LABELS = {
+    "fetching_hot_stocks": "正在获取雪球热门股票...",
+    "fetching_sector_leaders": "正在获取涨停板数据...",
+    "enriching_data": "正在获取股票详细数据...",
+    "filtering": "正在执行筛选过滤...",
+    "sorting": "正在排序候选股票...",
+    "done": "筛选完成",
+}
+
+
+@app.get("/api/recommendation/stream")
+async def get_recommendations_stream():
+    """SSE 端点：实时推送中线趋势股选股进度和最终结果。"""
+    from fastapi.responses import StreamingResponse
+    import json
+    import asyncio
+    import concurrent.futures
+    import queue
+
+    async def event_generator():
+        log_queue = queue.Queue()
+        result_holder = {"stocks": None, "error": None}
+
+        def on_progress(step: str, current: int, total: int):
+            label = _STEP_LABELS.get(step, step)
+            if step == "enriching_data" and total > 0:
+                pct = int(current / total * 100)
+                log_queue.put(json.dumps({
+                    "type": "progress",
+                    "step": label,
+                    "current": current,
+                    "total": total,
+                    "percent": pct,
+                }, ensure_ascii=False))
+            else:
+                log_queue.put(json.dumps({
+                    "type": "log",
+                    "message": label,
+                }, ensure_ascii=False))
+
+        def fetch_sync():
+            try:
+                from tradingagents.dataflows.filters.stock_filters import get_filtered_candidates, _get_demo_candidates
+                from tradingagents.dataflows.providers import build_default_registry
+
+                registry = build_default_registry()
+                provider = registry.get("cn_akshare")
+                if provider is None:
+                    result_holder["error"] = "数据提供者未找到"
+                    return
+
+                candidates = get_filtered_candidates(provider, top_n=10, progress_callback=on_progress)
+
+                stocks = []
+                code_to_name = _get_reverse_stock_map_cached_only()
+                for stock in candidates:
+                    symbol = stock.get("symbol", "")
+                    name = stock.get("name", code_to_name.get(symbol, ""))
+                    price = stock.get("price", 0)
+                    is_bullish = stock.get("is_bullish")
+                    stocks.append({
+                        "symbol": symbol,
+                        "name": name,
+                        "price": price,
+                        "is_bullish": is_bullish,
+                    })
+
+                result_holder["stocks"] = stocks[:10]
+            except Exception as exc:
+                import traceback
+                result_holder["error"] = f"{exc}\n{traceback.format_exc()}"
+
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = loop.run_in_executor(executor, fetch_sync)
+
+            # 轮询日志队列，同时等待结果，带超时保护
+            start_time = asyncio.get_event_loop().time()
+            timeout = 120.0  # 120秒超时
+
+            while not future.done():
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed > timeout:
+                    yield f"data: {json.dumps({'type': 'error', 'message': '选股流程超时(120秒)，请重试'}, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+                try:
+                    msg = log_queue.get_nowait()
+                    yield f"data: {msg}\n\n"
+                except queue.Empty:
+                    await asyncio.sleep(0.3)
+
+            # 处理剩余日志
+            while True:
+                try:
+                    msg = log_queue.get_nowait()
+                    yield f"data: {msg}\n\n"
+                except queue.Empty:
+                    break
+
+            # 发送最终结果
+            if result_holder["error"]:
+                yield f"data: {json.dumps({'type': 'error', 'message': result_holder['error']}, ensure_ascii=False)}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'result', 'stocks': result_holder['stocks']}, ensure_ascii=False)}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ─── Static Files & SPA Routing ──────────────────────────────────────────────

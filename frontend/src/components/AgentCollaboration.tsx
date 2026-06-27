@@ -70,26 +70,26 @@ const VERDICT_COLORS: Record<string, string> = {
 // ── 流程图布局 ────────────────────────────────────────────────────────────────
 
 const NODE_POSITIONS_V2: Record<string, { x: number; y: number }> = {
-    // 阶段1：排雷与数据提取组（左侧竖排）
+    // 阶段1：核心分析师组（横向排列，并行执行）
     'Market Analyst':           { x: 0, y: 0 },
-    'Volume Price Analyst':     { x: 0, y: 75 },
-    'Anti-Quant Trap Analyst':  { x: 0, y: 150 },
-    'Fundamentals Analyst':     { x: 0, y: 225 },
-    'Smart Money Analyst':      { x: 0, y: 300 },
-    'Macro Analyst':            { x: 0, y: 375 },
-    'News Analyst':             { x: 0, y: 450 },
-    'Social Analyst':           { x: 0, y: 525 },
-    'Sector Rotation Analyst':  { x: 0, y: 600 },
-    // 阶段2：深度逻辑辩论中枢（中列）
-    'Bull Researcher':          { x: 280, y: 60 },
-    'Bear Researcher':          { x: 280, y: 200 },
-    'Research Manager':         { x: 280, y: 340 },
-    // 阶段3：执行与输出组（右侧）
-    'Trader':                   { x: 560, y: 80 },
-    'Aggressive Analyst':       { x: 560, y: 200 },
-    'Neutral Analyst':          { x: 680, y: 200 },
-    'Conservative Analyst':     { x: 800, y: 200 },
-    'Portfolio Manager':        { x: 920, y: 200 },
+    'Volume Price Analyst':     { x: 100, y: 0 },
+    'Fundamentals Analyst':     { x: 200, y: 0 },
+    'Smart Money Analyst':      { x: 300, y: 0 },
+    'Macro Analyst':            { x: 400, y: 0 },
+    'News Analyst':             { x: 500, y: 0 },
+    'Social Analyst':           { x: 600, y: 0 },
+    // 阶段2：辩论与综合组
+    'Bull Researcher':          { x: 200, y: 180 },
+    'Bear Researcher':          { x: 400, y: 180 },
+    'Research Manager':         { x: 300, y: 320 },
+    'Sector Rotation Analyst':  { x: 100, y: 320 },
+    'Anti-Quant Trap Analyst':  { x: 500, y: 320 },
+    // 阶段3：执行与输出组
+    'Trader':                   { x: 300, y: 480 },
+    'Aggressive Analyst':       { x: 100, y: 600 },
+    'Neutral Analyst':          { x: 300, y: 600 },
+    'Conservative Analyst':     { x: 500, y: 600 },
+    'Portfolio Manager':        { x: 300, y: 720 },
 }
 
 // 需要额外 handle 的节点（用于辩论连线）
@@ -109,26 +109,35 @@ interface EdgeDef {
 }
 
 const EDGE_DEFS_V2: EdgeDef[] = [
-    // 阶段1：排雷与数据提取组（线性接力）
-    { source: 'Market Analyst', target: 'Volume Price Analyst', label: '接力', stage: 'stage1' },
-    { source: 'Volume Price Analyst', target: 'Anti-Quant Trap Analyst', label: '接力', stage: 'stage1' },
-    { source: 'Anti-Quant Trap Analyst', target: 'Fundamentals Analyst', label: '接力', stage: 'stage1' },
-    { source: 'Fundamentals Analyst', target: 'Smart Money Analyst', label: '接力', stage: 'stage1' },
-    { source: 'Smart Money Analyst', target: 'Macro Analyst', label: '接力', stage: 'stage1' },
-    { source: 'Macro Analyst', target: 'News Analyst', label: '接力', stage: 'stage1' },
-    { source: 'News Analyst', target: 'Social Analyst', label: '接力', stage: 'stage1' },
-    { source: 'Social Analyst', target: 'Sector Rotation Analyst', label: '接力', stage: 'stage1' },
-    // 阶段1 → 阶段2（行业轮动是核心定调点）
-    { source: 'Sector Rotation Analyst', target: 'Bull Researcher', label: '数据汇总', stage: 'transition1' },
-    // 阶段2：深度逻辑辩论（多空辩论）
+    // 阶段1：7个核心分析师并行 → 多头/空头（数据输入）
+    { source: 'Market Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Volume Price Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Fundamentals Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Smart Money Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Macro Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'News Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Social Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Market Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Volume Price Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Fundamentals Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Smart Money Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Macro Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'News Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Social Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
+    // 阶段2：多空辩论
     { source: 'Bull Researcher', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', bidirectional: true, stage: 'stage2' },
+    // 阶段2：行业轮动 + 防量化陷阱 → 研究经理
+    { source: 'Sector Rotation Analyst', target: 'Research Manager', label: '数据', stage: 'stage2', thin: true },
+    { source: 'Anti-Quant Trap Analyst', target: 'Research Manager', label: '数据', stage: 'stage2', thin: true },
+    { source: 'Bull Researcher', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', stage: 'stage2' },
     { source: 'Bear Researcher', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', stage: 'stage2' },
     // 阶段2 → 阶段3
     { source: 'Research Manager', target: 'Trader', label: '投资计划', stage: 'transition2' },
-    // 阶段3：执行与输出（交易员 → 风控三选一 → 组合经理）
+    // 阶段3：交易员 → 三种策略分析（并行）
     { source: 'Trader', target: 'Aggressive Analyst', stage: 'stage3', thin: true },
     { source: 'Trader', target: 'Neutral Analyst', stage: 'stage3', thin: true },
     { source: 'Trader', target: 'Conservative Analyst', stage: 'stage3', thin: true },
+    // 阶段3：三种策略 → 组合经理
     { source: 'Aggressive Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
     { source: 'Neutral Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
     { source: 'Conservative Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
@@ -145,9 +154,9 @@ interface GroupLabelDef {
 }
 
 const GROUP_LABELS_V2: GroupLabelDef[] = [
-    { id: 'group-stage1', label: '阶段1：排雷与数据提取', position: { x: -16, y: -30 }, width: 248, height: 680 },
-    { id: 'group-stage2', label: '阶段2：深度逻辑辩论', position: { x: 264, y: 44 }, width: 248, height: 380 },
-    { id: 'group-stage3', label: '阶段3：执行与输出', position: { x: 544, y: 44 }, width: 380, height: 380 },
+    { id: 'group-stage1', label: '阶段1：7分析师并行数据采集', position: { x: -16, y: -30 }, width: 700, height: 100 },
+    { id: 'group-stage2', label: '阶段2：多空辩论+行业轮动+防量化陷阱', position: { x: -16, y: 160 }, width: 700, height: 220 },
+    { id: 'group-stage3', label: '阶段3：交易员+三策略+组合经理', position: { x: -16, y: 460 }, width: 700, height: 320 },
 ]
 
 // ── 自定义节点组件 ────────────────────────────────────────────────────────────

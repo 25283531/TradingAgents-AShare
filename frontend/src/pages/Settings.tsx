@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Save, Key, Database, Loader2, Trash2, Link2, Copy, Plus, CheckCircle2, Mail, Flame, Webhook } from 'lucide-react'
+import { Save, Key, Database, Loader2, Trash2, Link2, Copy, Plus, CheckCircle2, Mail, Flame, Webhook, Shield } from 'lucide-react'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import type { RuntimeWarmupResult, UserToken } from '@/types'
@@ -40,7 +40,7 @@ function inferPreset(llmProvider: string, backendUrl: string): string {
 
 export default function Settings() {
     const { user } = useAuthStore()
-    const [defaultAnalysts, setDefaultAnalysts] = useState(['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price'])
+    const [defaultAnalysts, setDefaultAnalysts] = useState(['market', 'social', 'news', 'fundamentals', 'macro', 'smart_money', 'volume_price', 'sector_rotation', 'anti_quant_trap'])
     const [customPrompt, setCustomPrompt] = useState('')
     const [llmApiKey, setLlmApiKey] = useState('')
     const [hasStoredApiKey, setHasStoredApiKey] = useState(false)
@@ -545,6 +545,8 @@ export default function Settings() {
                             { key: 'macro', label: '宏观板块' },
                             { key: 'smart_money', label: '主力资金' },
                             { key: 'volume_price', label: '量价分析' },
+                            { key: 'sector_rotation', label: '行业轮动' },
+                            { key: 'anti_quant_trap', label: '防量化陷阱' },
                         ].map((analyst) => {
                             const active = defaultAnalysts.includes(analyst.key)
                             return (
@@ -741,7 +743,7 @@ export default function Settings() {
 
             <div className="card space-y-4">
                 <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 text-blue-500" />
+                    <Shield className="w-5 h-5 text-blue-500" />
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">风险偏好配置</h2>
                 </div>
 

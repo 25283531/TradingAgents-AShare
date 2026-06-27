@@ -167,13 +167,8 @@ def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optio
         pass
 
     _notify("fetching_sector_leaders", 0, 0)
-    try:
-        sector_leaders = _fetch_sector_leaders(data_provider)
-        for stock in sector_leaders:
-            if stock["symbol"] not in [c["symbol"] for c in candidates]:
-                candidates.append(stock)
-    except Exception:
-        pass
+    # get_zt_pool 返回的是统计摘要（连板分布），不是个股列表，暂时跳过
+    # 后续可以改用其他数据源获取强势股票
 
     if not candidates:
         return _get_demo_candidates(top_n)

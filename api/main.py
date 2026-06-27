@@ -5216,7 +5216,8 @@ async def get_recommendations_stream():
                 code_to_name = _get_reverse_stock_map_cached_only()
                 for stock in candidates:
                     symbol = stock.get("symbol", "")
-                    name = stock.get("name", code_to_name.get(symbol, ""))
+                    # 优先使用候选数据中的 name，只有在 name 为空时才查映射表
+                    name = stock.get("name") or code_to_name.get(symbol, "")
                     price = stock.get("price", 0)
                     is_bullish = stock.get("is_bullish")
                     stocks.append({

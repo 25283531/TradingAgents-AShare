@@ -1,0 +1,36 @@
+# Local development files
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+
+# Git files
+.git/
+.gitignore
+
+# Build artifacts
+frontend/dist/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# Node modules
+node_modules/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Data directory (should be mounted as volume)
+data/

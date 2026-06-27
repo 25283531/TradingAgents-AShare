@@ -72,29 +72,29 @@ const VERDICT_COLORS: Record<string, string> = {
 const NODE_POSITIONS_V2: Record<string, { x: number; y: number }> = {
     // 阶段1：核心分析师组（横向排列，并行执行）
     'Market Analyst':           { x: 0, y: 0 },
-    'Volume Price Analyst':     { x: 100, y: 0 },
-    'Fundamentals Analyst':     { x: 200, y: 0 },
-    'Smart Money Analyst':      { x: 300, y: 0 },
-    'Macro Analyst':            { x: 400, y: 0 },
-    'News Analyst':             { x: 500, y: 0 },
-    'Social Analyst':           { x: 600, y: 0 },
-    // 阶段2：辩论与综合组
-    'Bull Researcher':          { x: 200, y: 180 },
-    'Bear Researcher':          { x: 400, y: 180 },
-    'Research Manager':         { x: 300, y: 320 },
-    'Sector Rotation Analyst':  { x: 100, y: 320 },
-    'Anti-Quant Trap Analyst':  { x: 500, y: 320 },
+    'Volume Price Analyst':     { x: 240, y: 0 },
+    'Fundamentals Analyst':     { x: 480, y: 0 },
+    'Smart Money Analyst':      { x: 720, y: 0 },
+    'Macro Analyst':            { x: 960, y: 0 },
+    'News Analyst':             { x: 1200, y: 0 },
+    'Social Analyst':           { x: 1440, y: 0 },
+    // 阶段2：辩论与综合组（多头/空头居中，行业轮动/防量化陷阱位于研究总监上方）
+    'Bull Researcher':          { x: 540, y: 180 },
+    'Bear Researcher':          { x: 900, y: 180 },
+    'Sector Rotation Analyst':  { x: 480, y: 340 },
+    'Anti-Quant Trap Analyst':  { x: 960, y: 340 },
+    'Research Manager':         { x: 720, y: 480 },
     // 阶段3：执行与输出组
-    'Trader':                   { x: 300, y: 480 },
-    'Aggressive Analyst':       { x: 100, y: 600 },
-    'Neutral Analyst':          { x: 300, y: 600 },
-    'Conservative Analyst':     { x: 500, y: 600 },
-    'Portfolio Manager':        { x: 300, y: 720 },
+    'Trader':                   { x: 720, y: 620 },
+    'Aggressive Analyst':       { x: 480, y: 760 },
+    'Neutral Analyst':          { x: 720, y: 760 },
+    'Conservative Analyst':     { x: 960, y: 760 },
+    'Portfolio Manager':        { x: 720, y: 900 },
 }
 
-// 需要额外 handle 的节点（用于辩论连线）
-const BOTTOM_HANDLE_NODES = new Set(['Bull Researcher', 'Bear Researcher'])
-const TOP_HANDLE_NODES = new Set(['Bear Researcher', 'Research Manager'])
+// 需要额外 handle 的节点（用于数据流连线）
+const BOTTOM_HANDLE_NODES = new Set(['Market Analyst', 'Volume Price Analyst', 'Fundamentals Analyst', 'Smart Money Analyst', 'Macro Analyst', 'News Analyst', 'Social Analyst', 'Bull Researcher', 'Bear Researcher', 'Sector Rotation Analyst', 'Anti-Quant Trap Analyst', 'Research Manager', 'Trader', 'Aggressive Analyst', 'Neutral Analyst', 'Conservative Analyst'])
+const TOP_HANDLE_NODES = new Set(['Bull Researcher', 'Bear Researcher', 'Research Manager', 'Trader', 'Aggressive Analyst', 'Neutral Analyst', 'Conservative Analyst', 'Portfolio Manager'])
 
 // 边定义
 interface EdgeDef {
@@ -109,38 +109,39 @@ interface EdgeDef {
 }
 
 const EDGE_DEFS_V2: EdgeDef[] = [
-    // 阶段1：7个核心分析师并行 → 多头/空头（数据输入）
-    { source: 'Market Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Volume Price Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Fundamentals Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Smart Money Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Macro Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'News Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Social Analyst', target: 'Bull Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Market Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Volume Price Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Fundamentals Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Smart Money Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Macro Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'News Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    { source: 'Social Analyst', target: 'Bear Researcher', label: '数据', stage: 'stage1', thin: true },
-    // 阶段2：多空辩论
+    // 阶段1：7个核心分析师并行 → 多头/空头（数据输入）- 使用上下handle实现垂直数据流
+    { source: 'Market Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Volume Price Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Fundamentals Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Smart Money Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Macro Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'News Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Social Analyst', target: 'Bull Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Market Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Volume Price Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Fundamentals Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Smart Money Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Macro Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'News Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    { source: 'Social Analyst', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage1', thin: true },
+    // 阶段2：多空辩论（双向）
     { source: 'Bull Researcher', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', bidirectional: true, stage: 'stage2' },
-    // 阶段2：行业轮动 + 防量化陷阱 → 研究经理
-    { source: 'Sector Rotation Analyst', target: 'Research Manager', label: '数据', stage: 'stage2', thin: true },
-    { source: 'Anti-Quant Trap Analyst', target: 'Research Manager', label: '数据', stage: 'stage2', thin: true },
+    // 阶段2：行业轮动 + 防量化陷阱 → 研究经理（垂直数据流）
+    { source: 'Sector Rotation Analyst', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage2', thin: true },
+    { source: 'Anti-Quant Trap Analyst', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '数据', stage: 'stage2', thin: true },
+    // 阶段2：多空辩论结果 → 研究经理
     { source: 'Bull Researcher', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', stage: 'stage2' },
     { source: 'Bear Researcher', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', stage: 'stage2' },
-    // 阶段2 → 阶段3
-    { source: 'Research Manager', target: 'Trader', label: '投资计划', stage: 'transition2' },
+    // 阶段2 → 阶段3：研究经理 → 交易员
+    { source: 'Research Manager', target: 'Trader', sourceHandle: 'bottom', targetHandle: 'top', label: '投资计划', stage: 'transition2' },
     // 阶段3：交易员 → 三种策略分析（并行）
-    { source: 'Trader', target: 'Aggressive Analyst', stage: 'stage3', thin: true },
-    { source: 'Trader', target: 'Neutral Analyst', stage: 'stage3', thin: true },
-    { source: 'Trader', target: 'Conservative Analyst', stage: 'stage3', thin: true },
+    { source: 'Trader', target: 'Aggressive Analyst', sourceHandle: 'bottom', targetHandle: 'top', stage: 'stage3', thin: true },
+    { source: 'Trader', target: 'Neutral Analyst', sourceHandle: 'bottom', targetHandle: 'top', stage: 'stage3', thin: true },
+    { source: 'Trader', target: 'Conservative Analyst', sourceHandle: 'bottom', targetHandle: 'top', stage: 'stage3', thin: true },
     // 阶段3：三种策略 → 组合经理
-    { source: 'Aggressive Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
-    { source: 'Neutral Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
-    { source: 'Conservative Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
+    { source: 'Aggressive Analyst', target: 'Portfolio Manager', sourceHandle: 'bottom', targetHandle: 'top', stage: 'stage3', thin: true },
+    { source: 'Neutral Analyst', target: 'Portfolio Manager', sourceHandle: 'bottom', targetHandle: 'top', stage: 'stage3', thin: true },
+    { source: 'Conservative Analyst', target: 'Portfolio Manager', sourceHandle: 'bottom', targetHandle: 'top', stage: 'stage3', thin: true },
 ]
 
 // ── 分组标签节点 ──────────────────────────────────────────────────────────────
@@ -154,9 +155,9 @@ interface GroupLabelDef {
 }
 
 const GROUP_LABELS_V2: GroupLabelDef[] = [
-    { id: 'group-stage1', label: '阶段1：7分析师并行数据采集', position: { x: -16, y: -30 }, width: 700, height: 100 },
-    { id: 'group-stage2', label: '阶段2：多空辩论+行业轮动+防量化陷阱', position: { x: -16, y: 160 }, width: 700, height: 220 },
-    { id: 'group-stage3', label: '阶段3：交易员+三策略+组合经理', position: { x: -16, y: 460 }, width: 700, height: 320 },
+    { id: 'group-stage1', label: '阶段1：7分析师并行数据采集', position: { x: -16, y: -30 }, width: 1700, height: 130 },
+    { id: 'group-stage2', label: '阶段2：多空辩论+行业轮动+防量化陷阱', position: { x: -16, y: 160 }, width: 1700, height: 380 },
+    { id: 'group-stage3', label: '阶段3：交易员+三策略+组合经理', position: { x: -16, y: 600 }, width: 1700, height: 360 },
 ]
 
 // ── 自定义节点组件 ────────────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ function AgentNodeComponent({ data }: NodeProps<AgentFlowNode>) {
     return (
         <div
             className={[
-                'px-4 py-3 rounded-xl border transition-all duration-300 min-w-[210px] max-w-[218px]',
+                'px-4 py-3 rounded-xl border transition-all duration-300 min-w-[230px] max-w-[240px]',
                 !isParticipating ? 'opacity-30 grayscale' : '',
                 selected
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/10 shadow-lg ring-2 ring-blue-400/30'
@@ -443,7 +444,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
             </div>
 
             {/* React Flow 画布 */}
-            <div className="w-full" style={{ height: '520px' }}>
+            <div className="w-full" style={{ height: '700px' }}>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -463,7 +464,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
                     maxZoom={2}
                     preventScrolling={false}
                     fitView={true}
-                    translateExtent={[[-40, -40], [1200, 800]]}
+                    translateExtent={[[-40, -40], [1800, 1000]]}
                 />
             </div>
         </section>

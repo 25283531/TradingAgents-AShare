@@ -229,7 +229,7 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
                                         type="text"
                                         value={row.symbol}
                                         onChange={e => handleInputChange(row.id, 'symbol', e.target.value)}
-                                        onFocus={() => {
+                                        onFocus={(e) => {
                                             setFocusedRowId(row.id)
                                             setSelectedRowId(row.id)
                                             setSearchQuery(e.target.value)

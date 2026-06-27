@@ -916,6 +916,10 @@ class UserRuntimeConfigResponse(BaseModel):
     email_report_enabled: bool = True
     wecom_report_enabled: bool = True
     default_analysts: List[str] = Field(default_factory=lambda: ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price", "sector_rotation", "anti_quant_trap"])
+    min_market_cap: int = 50
+    min_avg_volume: int = 2
+    min_pe: int = 0
+    risk_profile: str = "neutral"
 
 
 class UserRuntimeConfigUpdateRequest(BaseModel):
@@ -937,6 +941,10 @@ class UserRuntimeConfigUpdateRequest(BaseModel):
     warmup: bool = True
     force_warmup: bool = False
     default_analysts: Optional[List[str]] = None
+    min_market_cap: Optional[int] = None
+    min_avg_volume: Optional[int] = None
+    min_pe: Optional[int] = None
+    risk_profile: Optional[str] = None
 
 
 class UserRuntimeWarmupRequest(UserRuntimeConfigUpdateRequest):
@@ -1044,6 +1052,10 @@ def _user_config_overrides(user_id: Optional[str], db: Optional[Session] = None)
             "job_timeout",
             "stagger_delay",
             "batch_concurrency",
+            "min_market_cap",
+            "min_avg_volume",
+            "min_pe",
+            "risk_profile",
         ):
             value = getattr(user_cfg, key, None)
             if value is not None:
@@ -1051,6 +1063,15 @@ def _user_config_overrides(user_id: Optional[str], db: Optional[Session] = None)
         api_key = auth_service.decrypt_secret(user_cfg.api_key_encrypted)
         if api_key:
             result["api_key"] = api_key
+        
+        filter_config = {}
+        for key in ("min_market_cap", "min_avg_volume", "min_pe"):
+            value = getattr(user_cfg, key, None)
+            if value is not None:
+                filter_config[key] = value
+        if filter_config:
+            result["filter_config"] = filter_config
+        
         return result
 
     if db is not None:
@@ -1819,6 +1840,75 @@ async def _run_job_inner(
 
             # Use normalized ticker from intent parser if available
             ticker = user_intent.get("ticker") or ticker
+
+            # ── 阶段0：Python底层硬过滤（进入 Agent 前的物理防御）──
+            _emit_job_event(job_id, "agent.tool_call", {
+                "agent": "硬过滤", "tool": "filter_check",
+                "description": "开始硬过滤检查：市值、日均成交额、市盈率…",
+            })
+            filter_config = config.get("filter_config", {})
+            min_market_cap = filter_config.get("min_market_cap", 50)
+            min_avg_volume = filter_config.get("min_avg_volume", 2)
+            min_pe = filter_config.get("min_pe", 0)
+
+            def _run_hard_filter(ticker: str, trade_date: str) -> Optional[str]:
+                from tradingagents.dataflows.filters.stock_filters import _extract_market_cap, _calculate_avg_volume, _extract_trend_info
+                from tradingagents.agents.utils.agent_utils import get_fundamentals, get_stock_data
+                from datetime import datetime, timedelta
+
+                try:
+                    fundamentals = get_fundamentals(ticker, trade_date)
+                    market_cap = _extract_market_cap(fundamentals)
+                    if market_cap is not None and market_cap < min_market_cap:
+                        return f"市值{market_cap:.1f}亿 < {min_market_cap}亿，不符合流动性标准"
+                except Exception:
+                    pass
+
+                try:
+                    analysis_dt = datetime.strptime(trade_date, "%Y-%m-%d")
+                    start_date = (analysis_dt - timedelta(days=30)).strftime("%Y-%m-%d")
+                    stock_data = get_stock_data(ticker, start_date, trade_date)
+                    avg_volume = _calculate_avg_volume(stock_data)
+                    if avg_volume is not None and avg_volume < min_avg_volume:
+                        return f"日均成交额{avg_volume:.1f}亿 < {min_avg_volume}亿，流动性不足"
+                except Exception:
+                    pass
+
+                return None
+
+            filter_reason = await asyncio.to_thread(_run_hard_filter, ticker, request.trade_date)
+            if filter_reason:
+                _log(f"[HardFilter] 拦截: {filter_reason}")
+                _emit_job_event(job_id, "agent.tool_call", {
+                    "agent": "硬过滤", "tool": "filter_reject",
+                    "description": f"拦截: {filter_reason}",
+                })
+                result = {
+                    "mode": "filtered",
+                    "symbol": ticker,
+                    "trade_date": request.trade_date,
+                    "filter_reason": filter_reason,
+                    "message": "不符合流动性与中线防御标准，不消耗任何 Token",
+                }
+                _set_job(
+                    job_id,
+                    status="completed",
+                    result=result,
+                    decision="REJECT",
+                    finished_at=_utcnow_iso(),
+                )
+                _emit_job_event(
+                    job_id,
+                    "job.completed",
+                    {"job_id": job_id, "decision": "REJECT", "result": result},
+                )
+                _shared_data_collector.evict(request.symbol, request.trade_date)
+                return
+
+            _emit_job_event(job_id, "agent.tool_call", {
+                "agent": "硬过滤", "tool": "filter_pass",
+                "description": "硬过滤通过，开始数据采集",
+            })
 
             # 2. 一次性采集数据，短线/中线共用缓存
             lookback_label = "14天关键行情" if request.horizons == ["short"] else "90天全量行情、财务、新闻、资金"
@@ -3916,6 +4006,10 @@ def update_runtime_config(
         clear_api_key=updates.clear_api_key,
         clear_wecom_webhook=updates.clear_wecom_webhook,
         default_analysts=updates.default_analysts,
+        min_market_cap=updates.min_market_cap,
+        min_avg_volume=updates.min_avg_volume,
+        min_pe=updates.min_pe,
+        risk_profile=updates.risk_profile,
     )
     user_pref_updated = False
     if updates.email_report_enabled is not None:

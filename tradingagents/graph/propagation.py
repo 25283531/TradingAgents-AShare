@@ -47,6 +47,7 @@ class Propagator:
             f"{summarize_market_context(market_context)}\n"
             f"{user_context_summary}"
         )
+        risk_profile = normalized_user_context.get("risk_profile", "neutral")
         state: Dict[str, Any] = {
             "messages": [("human", user_prompt_context)],
             "company_of_interest": company_name,
@@ -54,10 +55,12 @@ class Propagator:
             "instrument_context": instrument_context,
             "market_context": market_context,
             "user_context": normalized_user_context,
+            "risk_profile": risk_profile,
             "workflow_context": {
-                "context_version": "v1",
+                "context_version": "v2",
                 "request_source": request_source,
                 "selected_analysts": selected_analysts or [],
+                "risk_profile": risk_profile,
             },
             "investment_debate_state": InvestDebateState(
                 {

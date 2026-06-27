@@ -43,6 +43,7 @@ from .conditional_logic import ConditionalLogic
 from .data_collector import DataCollector
 from .intent_parser import parse_intent
 from .setup import GraphSetup
+from .workflow_v2 import WorkflowV2
 from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
@@ -61,31 +62,28 @@ class TradingAgentsGraph:
         config: Dict[str, Any] = None,
         callbacks: Optional[List] = None,
         data_collector: Optional["DataCollector"] = None,
+        workflow_version: str = "v2",
     ):
         """Initialize the trading agents graph and components."""
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        self.workflow_version = workflow_version
 
-        # Update the interface's config
         set_config(self.config)
 
-        # Initialize persistence (Singleton Pattern for concurrency)
         if TradingAgentsGraph._shared_checkpointer is None:
             TradingAgentsGraph._shared_checkpointer = MemorySaver()
         
         self.checkpointer = TradingAgentsGraph._shared_checkpointer
 
-        # Create necessary directories
         os.makedirs(
             os.path.join(self.config["project_dir"], "dataflows/data_cache"),
             exist_ok=True,
         )
 
-        # Initialize LLMs with provider-specific thinking configuration
         llm_kwargs = self._get_provider_kwargs()
 
-        # Add callbacks to kwargs if provided (passed to LLM constructor)
         if self.callbacks:
             llm_kwargs["callbacks"] = self.callbacks
 
@@ -105,35 +103,19 @@ class TradingAgentsGraph:
         self.deep_thinking_llm = deep_client.get_llm()
         self.quick_thinking_llm = quick_client.get_llm()
         
-        # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
         self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
         self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
         self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
 
-        # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
 
-        # Data collector — fetches once, shared across dual-horizon runs
         self.data_collector = data_collector if data_collector is not None else DataCollector()
 
-        # Initialize components
         self.conditional_logic = ConditionalLogic(
             max_debate_rounds=self.config.get("max_debate_rounds", 1),
             max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
-        )
-        self.graph_setup = GraphSetup(
-            self.quick_thinking_llm,
-            self.deep_thinking_llm,
-            self.tool_nodes,
-            self.bull_memory,
-            self.bear_memory,
-            self.trader_memory,
-            self.invest_judge_memory,
-            self.risk_manager_memory,
-            self.conditional_logic,
-            data_collector=self.data_collector,
         )
 
         self.propagator = Propagator(
@@ -142,13 +124,40 @@ class TradingAgentsGraph:
         self.reflector = Reflector(self.quick_thinking_llm)
         self.signal_processor = SignalProcessor(self.quick_thinking_llm)
 
-        # State tracking
         self.curr_state = None
         self.ticker = None
-        self.log_states_dict = {}  # date to full state dict
+        self.log_states_dict = {}
 
-        # Set up the graph with checkpointer
-        self.graph = self.graph_setup.setup_graph(selected_analysts, checkpointer=self.checkpointer)
+        if self.workflow_version == "v2":
+            self.workflow_v2 = WorkflowV2(
+                self.quick_thinking_llm,
+                self.deep_thinking_llm,
+                self.tool_nodes,
+                self.bull_memory,
+                self.bear_memory,
+                self.trader_memory,
+                self.invest_judge_memory,
+                self.risk_manager_memory,
+                data_collector=self.data_collector,
+                risk_profile=self.config.get("risk_profile", "neutral"),
+                max_debate_rounds=self.config.get("max_debate_rounds", 1),
+                max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
+            )
+            self.graph = self.workflow_v2.setup_sequential_graph(selected_analysts)
+        else:
+            self.graph_setup = GraphSetup(
+                self.quick_thinking_llm,
+                self.deep_thinking_llm,
+                self.tool_nodes,
+                self.bull_memory,
+                self.bear_memory,
+                self.trader_memory,
+                self.invest_judge_memory,
+                self.risk_manager_memory,
+                self.conditional_logic,
+                data_collector=self.data_collector,
+            )
+            self.graph = self.graph_setup.setup_graph(selected_analysts, checkpointer=self.checkpointer)
 
     def get_state(self, thread_id: str):
         """Retrieve the current state for a given thread_id."""

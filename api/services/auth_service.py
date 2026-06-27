@@ -258,6 +258,10 @@ def upsert_user_llm_config(
     job_timeout: Optional[int] = None,
     stagger_delay: Optional[int] = None,
     batch_concurrency: Optional[int] = None,
+    min_market_cap: Optional[int] = None,
+    min_avg_volume: Optional[int] = None,
+    min_pe: Optional[int] = None,
+    risk_profile: Optional[str] = None,
 ) -> UserLLMConfigDB:
     row = get_user_llm_config(db, user_id)
     now = _utcnow()
@@ -300,6 +304,18 @@ def upsert_user_llm_config(
 
     if batch_concurrency is not None:
         row.batch_concurrency = batch_concurrency
+
+    if min_market_cap is not None:
+        row.min_market_cap = min_market_cap
+
+    if min_avg_volume is not None:
+        row.min_avg_volume = min_avg_volume
+
+    if min_pe is not None:
+        row.min_pe = min_pe
+
+    if risk_profile is not None:
+        row.risk_profile = risk_profile
 
     row.updated_at = now
     db.commit()

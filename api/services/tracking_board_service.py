@@ -165,10 +165,19 @@ def _summarize_trader_advice(text: str | None, fallback_text: str | None = None)
             r"结论[:：]\s*([^\n]+)",
             r"建议动作[:：]\s*([^\n]+)",
             r"方向[:：]\s*([^\n]+)",
+            r"操作建议[:：]\s*([^\n]+)",
+            r"Action_Plan[:：]\s*([^\n]+)",
+            r"Summary[:：]\s*([^\n]+)",
+            r"买入建议[:：]\s*([^\n]+)",
+            r"低吸区间[:：]\s*([^\n]+)",
+            r"止损位[:：]\s*([^\n]+)",
+            r"止盈位[:：]\s*([^\n]+)",
+            r"Decision[:：]\s*([^\n]+)",
+            r"STRONG BUY|BUY|HOLD|SELL",
         ):
             match = re.search(pattern, source, re.IGNORECASE)
             if match:
-                return _clip_summary(match.group(1))
+                return _clip_summary(match.group(1) if len(match.groups()) > 0 else match.group(0))
 
         lines = [
             _clip_summary(line.strip(" -*\t"))
@@ -178,6 +187,13 @@ def _summarize_trader_advice(text: str | None, fallback_text: str | None = None)
         for line in lines:
             if len(line) >= 6 and not re.match(r"^[一二三四五六七八九十0-9]+[、.)：:]?$", line):
                 return line
+
+    if text and len(text) >= 6:
+        return _clip_summary(text)
+
+    if fallback_text and len(fallback_text) >= 6:
+        return _clip_summary(fallback_text)
+
     return None
 
 

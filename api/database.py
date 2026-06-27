@@ -283,6 +283,8 @@ class ReportDB(Base):
     macro_report = Column(Text, nullable=True)
     smart_money_report = Column(Text, nullable=True)
     volume_price_report = Column(Text, nullable=True)
+    sector_report = Column(Text, nullable=True)
+    anti_quant_report = Column(Text, nullable=True)
     game_theory_report = Column(Text, nullable=True)
     investment_plan = Column(Text, nullable=True)
     trader_investment_plan = Column(Text, nullable=True)
@@ -315,6 +317,8 @@ class ReportDB(Base):
             "macro_report": self.macro_report,
             "smart_money_report": self.smart_money_report,
             "volume_price_report": self.volume_price_report,
+            "sector_report": self.sector_report,
+            "anti_quant_report": self.anti_quant_report,
             "game_theory_report": self.game_theory_report,
             "investment_plan": self.investment_plan,
             "trader_investment_plan": self.trader_investment_plan,
@@ -362,10 +366,14 @@ class UserLLMConfigDB(Base):
     max_risk_discuss_rounds = Column(Integer, nullable=True)
     api_key_encrypted = Column(Text, nullable=True)
     wecom_webhook_encrypted = Column(Text, nullable=True)
-    default_analysts = Column(Text, nullable=True)  # JSON list, e.g. '["market","social",...]'
-    job_timeout = Column(Integer, default=1800)  # 任务超时时间（秒），默认1800秒（30分钟）
-    stagger_delay = Column(Integer, default=1)  # 批量任务错峰间隔（秒），默认1秒
-    batch_concurrency = Column(Integer, default=3)  # 批量任务并发上限，默认3
+    default_analysts = Column(Text, nullable=True)
+    job_timeout = Column(Integer, default=1800)
+    stagger_delay = Column(Integer, default=1)
+    batch_concurrency = Column(Integer, default=3)
+    min_market_cap = Column(Integer, default=50)
+    min_avg_volume = Column(Integer, default=2)
+    min_pe = Column(Integer, default=0)
+    risk_profile = Column(String(20), default="neutral")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

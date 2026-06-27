@@ -69,34 +69,32 @@ const VERDICT_COLORS: Record<string, string> = {
 
 // ── 流程图布局 ────────────────────────────────────────────────────────────────
 
-const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
-    // 左列：数据源分析师
+const NODE_POSITIONS_V2: Record<string, { x: number; y: number }> = {
+    // 阶段1：排雷与数据提取组（左侧竖排）
     'Market Analyst':           { x: 0, y: 0 },
-    'Social Analyst':           { x: 0, y: 95 },
-    'News Analyst':             { x: 0, y: 190 },
-    'Fundamentals Analyst':     { x: 0, y: 285 },
-    'Macro Analyst':            { x: 0, y: 380 },
-    'Smart Money Analyst':      { x: 0, y: 475 },
-    'Volume Price Analyst':     { x: 0, y: 570 },
-    'Sector Rotation Analyst':  { x: 0, y: 665 },
-    'Anti-Quant Trap Analyst':  { x: 0, y: 760 },
-    // 研究团队（靠近左侧分析师）
-    'Bull Researcher':          { x: 470, y: 70 },
-    'Research Manager':         { x: 630, y: 220 },
-    'Bear Researcher':          { x: 470, y: 370 },
-    // 交易员
-    'Trader':                   { x: 890, y: 220 },
-    // 风控团队
-    'Aggressive Analyst':       { x: 1180, y: 70 },
-    'Neutral Analyst':          { x: 1180, y: 220 },
-    'Conservative Analyst':     { x: 1180, y: 370 },
-    // 组合经理
-    'Portfolio Manager':        { x: 1470, y: 220 },
+    'Volume Price Analyst':     { x: 0, y: 75 },
+    'Anti-Quant Trap Analyst':  { x: 0, y: 150 },
+    'Fundamentals Analyst':     { x: 0, y: 225 },
+    'Smart Money Analyst':      { x: 0, y: 300 },
+    'Macro Analyst':            { x: 0, y: 375 },
+    'News Analyst':             { x: 0, y: 450 },
+    'Social Analyst':           { x: 0, y: 525 },
+    'Sector Rotation Analyst':  { x: 0, y: 600 },
+    // 阶段2：深度逻辑辩论中枢（中列）
+    'Bull Researcher':          { x: 280, y: 60 },
+    'Bear Researcher':          { x: 280, y: 200 },
+    'Research Manager':         { x: 280, y: 340 },
+    // 阶段3：执行与输出组（右侧）
+    'Trader':                   { x: 560, y: 80 },
+    'Aggressive Analyst':       { x: 560, y: 200 },
+    'Neutral Analyst':          { x: 680, y: 200 },
+    'Conservative Analyst':     { x: 800, y: 200 },
+    'Portfolio Manager':        { x: 920, y: 200 },
 }
 
 // 需要额外 handle 的节点（用于辩论连线）
-const BOTTOM_HANDLE_NODES = new Set(['Bull Researcher'])
-const TOP_HANDLE_NODES = new Set(['Bear Researcher'])
+const BOTTOM_HANDLE_NODES = new Set(['Bull Researcher', 'Bear Researcher'])
+const TOP_HANDLE_NODES = new Set(['Bear Researcher', 'Research Manager'])
 
 // 边定义
 interface EdgeDef {
@@ -107,29 +105,33 @@ interface EdgeDef {
     label?: string
     bidirectional?: boolean
     thin?: boolean
+    stage?: string
 }
 
-const EDGE_DEFS: EdgeDef[] = [
-    // 数据源 → 多空研究员
-    ...['Market Analyst', 'Social Analyst', 'News Analyst', 'Fundamentals Analyst', 'Macro Analyst', 'Smart Money Analyst', 'Volume Price Analyst', 'Sector Rotation Analyst', 'Anti-Quant Trap Analyst']
-        .map(s => ({ source: s, target: 'Bull Researcher', thin: true } as EdgeDef)),
-    ...['Market Analyst', 'Social Analyst', 'News Analyst', 'Fundamentals Analyst', 'Macro Analyst', 'Smart Money Analyst', 'Volume Price Analyst', 'Sector Rotation Analyst', 'Anti-Quant Trap Analyst']
-        .map(s => ({ source: s, target: 'Bear Researcher', thin: true } as EdgeDef)),
-    // 多空辩论（双向）
-    { source: 'Bull Researcher', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', bidirectional: true },
-    // 研究员 → 研究总监
-    { source: 'Bull Researcher', target: 'Research Manager' },
-    { source: 'Bear Researcher', target: 'Research Manager' },
-    // 研究总监 → 交易员
-    { source: 'Research Manager', target: 'Trader', label: '投资计划' },
-    // 交易员 → 风控
-    { source: 'Trader', target: 'Aggressive Analyst' },
-    { source: 'Trader', target: 'Neutral Analyst', label: '交易方案' },
-    { source: 'Trader', target: 'Conservative Analyst' },
-    // 风控 → 组合经理
-    { source: 'Aggressive Analyst', target: 'Portfolio Manager' },
-    { source: 'Neutral Analyst', target: 'Portfolio Manager' },
-    { source: 'Conservative Analyst', target: 'Portfolio Manager' },
+const EDGE_DEFS_V2: EdgeDef[] = [
+    // 阶段1：排雷与数据提取组（线性接力）
+    { source: 'Market Analyst', target: 'Volume Price Analyst', label: '接力', stage: 'stage1' },
+    { source: 'Volume Price Analyst', target: 'Anti-Quant Trap Analyst', label: '接力', stage: 'stage1' },
+    { source: 'Anti-Quant Trap Analyst', target: 'Fundamentals Analyst', label: '接力', stage: 'stage1' },
+    { source: 'Fundamentals Analyst', target: 'Smart Money Analyst', label: '接力', stage: 'stage1' },
+    { source: 'Smart Money Analyst', target: 'Macro Analyst', label: '接力', stage: 'stage1' },
+    { source: 'Macro Analyst', target: 'News Analyst', label: '接力', stage: 'stage1' },
+    { source: 'News Analyst', target: 'Social Analyst', label: '接力', stage: 'stage1' },
+    { source: 'Social Analyst', target: 'Sector Rotation Analyst', label: '接力', stage: 'stage1' },
+    // 阶段1 → 阶段2（行业轮动是核心定调点）
+    { source: 'Sector Rotation Analyst', target: 'Bull Researcher', label: '数据汇总', stage: 'transition1' },
+    // 阶段2：深度逻辑辩论（多空辩论）
+    { source: 'Bull Researcher', target: 'Bear Researcher', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', bidirectional: true, stage: 'stage2' },
+    { source: 'Bear Researcher', target: 'Research Manager', sourceHandle: 'bottom', targetHandle: 'top', label: '辩论', stage: 'stage2' },
+    // 阶段2 → 阶段3
+    { source: 'Research Manager', target: 'Trader', label: '投资计划', stage: 'transition2' },
+    // 阶段3：执行与输出（交易员 → 风控三选一 → 组合经理）
+    { source: 'Trader', target: 'Aggressive Analyst', stage: 'stage3', thin: true },
+    { source: 'Trader', target: 'Neutral Analyst', stage: 'stage3', thin: true },
+    { source: 'Trader', target: 'Conservative Analyst', stage: 'stage3', thin: true },
+    { source: 'Aggressive Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
+    { source: 'Neutral Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
+    { source: 'Conservative Analyst', target: 'Portfolio Manager', stage: 'stage3', thin: true },
 ]
 
 // ── 分组标签节点 ──────────────────────────────────────────────────────────────
@@ -142,10 +144,10 @@ interface GroupLabelDef {
     height: number
 }
 
-const GROUP_LABELS: GroupLabelDef[] = [
-    { id: 'group-sources', label: '技术分析', position: { x: -16, y: -30 }, width: 248, height: 760 },
-    { id: 'group-research', label: '研究团队', position: { x: 454, y: 44 }, width: 410, height: 450 },
-    { id: 'group-risk', label: '风控团队', position: { x: 1164, y: 44 }, width: 248, height: 450 },
+const GROUP_LABELS_V2: GroupLabelDef[] = [
+    { id: 'group-stage1', label: '阶段1：排雷与数据提取', position: { x: -16, y: -30 }, width: 248, height: 680 },
+    { id: 'group-stage2', label: '阶段2：深度逻辑辩论', position: { x: 264, y: 44 }, width: 248, height: 380 },
+    { id: 'group-stage3', label: '阶段3：执行与输出', position: { x: 544, y: 44 }, width: 380, height: 380 },
 ]
 
 // ── 自定义节点组件 ────────────────────────────────────────────────────────────
@@ -317,7 +319,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
         const agentNodes: AgentFlowNode[] = cards.map(card => ({
             id: card.meta.name,
             type: 'agent',
-            position: NODE_POSITIONS[card.meta.name] ?? { x: 0, y: 0 },
+            position: NODE_POSITIONS_V2[card.meta.name] ?? { x: 0, y: 0 },
             data: {
                 meta: card.meta,
                 status: card.status,
@@ -327,7 +329,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
             } satisfies AgentNodeData,
         }))
 
-        const labelNodes: GroupLabelFlowNode[] = GROUP_LABELS.map(g => ({
+        const labelNodes: GroupLabelFlowNode[] = GROUP_LABELS_V2.map(g => ({
             id: g.id,
             type: 'groupLabel',
             position: g.position,
@@ -342,7 +344,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
 
     // 构建 React Flow 边
     const edges: Edge[] = useMemo(() => {
-        return EDGE_DEFS.map((def, i) => {
+        return EDGE_DEFS_V2.map((def, i) => {
             const sourceCard = cardMap.get(def.source)
             const targetCard = cardMap.get(def.target)
             const sourceDone = sourceCard?.status === 'completed'
@@ -452,7 +454,7 @@ export default function AgentCollaboration({ onSelectSection, onOpenDebate, sele
                     maxZoom={2}
                     preventScrolling={false}
                     fitView={true}
-                    translateExtent={[[-40, -40], [1730, 900]]}
+                    translateExtent={[[-40, -40], [1200, 800]]}
                 />
             </div>
         </section>

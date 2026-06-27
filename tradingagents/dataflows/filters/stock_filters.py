@@ -22,22 +22,23 @@ DEFAULT_DEMO_STOCKS: List[Dict[str, Any]] = [
 class StockFilter:
     """股票过滤类，实现代码硬过滤逻辑。"""
 
-    MARKET_CAP_MIN = 50  # 最小市值（亿元）
-    AVG_VOLUME_MIN = 2   # 最小日均成交额（亿元）
-    TREND_WINDOW = 60    # 趋势判断窗口（天）
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.config = config or {}
+        self.MARKET_CAP_MIN = self.config.get("min_market_cap", 50)
+        self.AVG_VOLUME_MIN = self.config.get("min_avg_volume", 2)
+        self.PE_MIN = self.config.get("min_pe", 0)
+        self.TREND_WINDOW = 60
 
-    @classmethod
-    def filter_stocks(cls, stocks: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    def filter_stocks(self, stocks: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
         """批量过滤股票列表。"""
         filtered = []
         for stock in stocks:
-            result = cls.filter_single(stock)
+            result = self.filter_single(stock)
             if result["pass"]:
                 filtered.append(stock)
         return filtered
 
-    @classmethod
-    def filter_single(cls, stock: Dict[str, Any]) -> Dict[str, Any]:
+    def filter_single(self, stock: Dict[str, Any]) -> Dict[str, Any]:
         """过滤单只股票，返回过滤结果。"""
         result = {
             "pass": True,
@@ -45,20 +46,25 @@ class StockFilter:
             "filters": {},
         }
 
-        # 如果数据缺失太多，跳过过滤（有默认值）
-        market_cap_result = cls._filter_market_cap(stock)
+        market_cap_result = self._filter_market_cap(stock)
         result["filters"]["market_cap"] = market_cap_result
         if not market_cap_result["pass"]:
             result["pass"] = False
             result["reasons"].append(market_cap_result["reason"])
 
-        volume_result = cls._filter_volume(stock)
+        volume_result = self._filter_volume(stock)
         result["filters"]["volume"] = volume_result
         if not volume_result["pass"]:
             result["pass"] = False
             result["reasons"].append(volume_result["reason"])
 
-        trend_result = cls._filter_trend(stock)
+        pe_result = self._filter_pe(stock)
+        result["filters"]["pe"] = pe_result
+        if not pe_result["pass"]:
+            result["pass"] = False
+            result["reasons"].append(pe_result["reason"])
+
+        trend_result = self._filter_trend(stock)
         result["filters"]["trend"] = trend_result
         if not trend_result["pass"]:
             result["pass"] = False
@@ -66,12 +72,10 @@ class StockFilter:
 
         return result
 
-    @classmethod
-    def _filter_market_cap(cls, stock: Dict[str, Any]) -> Dict[str, Any]:
-        """市值过滤：排除市值小于50亿的股票（容易被量化控盘）。"""
+    def _filter_market_cap(self, stock: Dict[str, Any]) -> Dict[str, Any]:
+        """市值过滤：排除市值小于配置值的股票（容易被量化控盘）。"""
         market_cap = stock.get("market_cap")
         if market_cap is None:
-            # 数据缺失时默认通过（有默认值支撑）
             return {"pass": True, "reason": "市值数据缺失（使用默认值）", "value": None}
 
         try:
@@ -79,14 +83,13 @@ class StockFilter:
         except (ValueError, TypeError):
             return {"pass": True, "reason": "市值数据无效（使用默认值）", "value": market_cap}
 
-        if cap < cls.MARKET_CAP_MIN:
-            return {"pass": False, "reason": f"市值{cap}亿小于最低要求{cls.MARKET_CAP_MIN}亿", "value": cap}
+        if cap < self.MARKET_CAP_MIN:
+            return {"pass": False, "reason": f"市值{cap}亿小于最低要求{self.MARKET_CAP_MIN}亿", "value": cap}
 
         return {"pass": True, "reason": f"市值{cap}亿符合要求", "value": cap}
 
-    @classmethod
-    def _filter_volume(cls, stock: Dict[str, Any]) -> Dict[str, Any]:
-        """成交额过滤：排除近5天日均成交额小于2亿的股票（缺乏流动性）。"""
+    def _filter_volume(self, stock: Dict[str, Any]) -> Dict[str, Any]:
+        """成交额过滤：排除近5天日均成交额小于配置值的股票（缺乏流动性）。"""
         avg_volume = stock.get("avg_volume")
         if avg_volume is None:
             return {"pass": True, "reason": "成交额数据缺失（使用默认值）", "value": None}
@@ -96,13 +99,28 @@ class StockFilter:
         except (ValueError, TypeError):
             return {"pass": True, "reason": "成交额数据无效（使用默认值）", "value": avg_volume}
 
-        if vol < cls.AVG_VOLUME_MIN:
-            return {"pass": False, "reason": f"日均成交额{vol}亿小于最低要求{cls.AVG_VOLUME_MIN}亿", "value": vol}
+        if vol < self.AVG_VOLUME_MIN:
+            return {"pass": False, "reason": f"日均成交额{vol}亿小于最低要求{self.AVG_VOLUME_MIN}亿", "value": vol}
 
         return {"pass": True, "reason": f"日均成交额{vol}亿符合要求", "value": vol}
 
-    @classmethod
-    def _filter_trend(cls, stock: Dict[str, Any]) -> Dict[str, Any]:
+    def _filter_pe(self, stock: Dict[str, Any]) -> Dict[str, Any]:
+        """市盈率过滤：排除亏损股。"""
+        pe_ratio = stock.get("pe_ratio")
+        if pe_ratio is None:
+            return {"pass": True, "reason": "市盈率数据缺失（使用默认值）", "value": None}
+
+        try:
+            pe = float(pe_ratio)
+        except (ValueError, TypeError):
+            return {"pass": True, "reason": "市盈率数据无效（使用默认值）", "value": pe_ratio}
+
+        if pe < self.PE_MIN:
+            return {"pass": False, "reason": f"市盈率{pe:.1f}小于最低要求{self.PE_MIN}，亏损股风险", "value": pe}
+
+        return {"pass": True, "reason": f"市盈率{pe:.1f}符合要求", "value": pe}
+
+    def _filter_trend(self, stock: Dict[str, Any]) -> Dict[str, Any]:
         """趋势过滤：排除处于明显下行通道的股票。"""
         trend_status = stock.get("trend_status")
         trend_strength = stock.get("trend_strength")
@@ -119,13 +137,14 @@ class StockFilter:
         return {"pass": True, "reason": f"趋势状态{trend_status}，强度{trend_strength}", "value": trend_status}
 
 
-def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optional[str] = None) -> list[Dict[str, Any]]:
+def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optional[str] = None, filter_config: Optional[Dict[str, Any]] = None) -> list[Dict[str, Any]]:
     """获取经过硬过滤的股票候选列表。
 
     Args:
         data_provider: 数据提供者实例
         top_n: 返回的股票数量
         analysis_date: 分析日期（格式：YYYY-MM-DD），用于历史数据复盘，默认使用当前日期
+        filter_config: 过滤配置参数
     """
     candidates = []
 
@@ -153,7 +172,7 @@ def get_filtered_candidates(data_provider, top_n: int = 15, analysis_date: Optio
     for stock in candidates:
         _enrich_stock_data(data_provider, stock, analysis_date)
 
-    filtered = StockFilter.filter_stocks(candidates)
+    filtered = StockFilter(filter_config).filter_stocks(candidates)
 
     # 如果过滤后为空，返回演示数据
     if not filtered:

@@ -152,6 +152,7 @@ class AgentState(MessagesState):
     instrument_context: Annotated[InstrumentContext, "Normalized instrument context"]
     market_context: Annotated[MarketContext, "Market session and timing context"]
     user_context: Annotated[UserContext, "User-specific holdings and constraints"]
+    risk_profile: Annotated[str, "User's risk profile: aggressive, neutral, conservative"]
     workflow_context: Annotated[WorkflowContext, "Workflow metadata for the current run"]
 
     market_report: Annotated[str, "Report from the Market Analyst"]
@@ -184,3 +185,4 @@ class AgentState(MessagesState):
     short_term_result: Annotated[Optional[dict], "Final short-term analysis result"]
     medium_term_result: Annotated[Optional[dict], "Final medium-term analysis result"]
     metadata: Annotated[dict[str, Any], "Optional runtime metadata"]
+    circuit_breaker: Annotated[Optional[dict], "Circuit breaker state: triggered, reason, analyst"]

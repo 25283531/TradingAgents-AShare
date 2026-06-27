@@ -22,6 +22,7 @@ def create_trader(llm, memory):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         risk_feedback_state = state.get("risk_feedback_state", {})
+        risk_profile = state.get("risk_profile", "neutral")
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -37,6 +38,12 @@ def create_trader(llm, memory):
         context_view = build_agent_context_view(state, "trader")
         risk_feedback_summary = summarize_risk_feedback(risk_feedback_state)
 
+        risk_profile_display = {
+            "aggressive": "激进",
+            "neutral": "中性",
+            "conservative": "稳健",
+        }.get(risk_profile, "中性")
+
         messages = [
             {
                 "role": "system",
@@ -50,7 +57,7 @@ def create_trader(llm, memory):
                     previous_trader_plan=previous_trader_plan or "无",
                     instrument_context_summary=context_view["instrument_context_summary"],
                     market_context_summary=context_view["market_context_summary"],
-                    user_context_summary=context_view["user_context_summary"],
+                    user_context_summary=f"{context_view['user_context_summary']}\n\n风险偏好：{risk_profile_display}",
                     risk_feedback_summary=risk_feedback_summary,
                     past_memory_str=past_memory_str,
                 ),

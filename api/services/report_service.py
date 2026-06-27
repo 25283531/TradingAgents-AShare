@@ -207,6 +207,7 @@ def resolve_report_fields(
     """Resolve the final structured fields once for both SSE payloads and DB writes."""
     market_report = sentiment_report = news_report = None
     fundamentals_report = macro_report = smart_money_report = volume_price_report = game_theory_report = None
+    sector_report = anti_quant_report = None
     investment_plan = trader_investment_plan = None
     final_trade_decision = None
 
@@ -218,6 +219,8 @@ def resolve_report_fields(
         macro_report = result_data.get("macro_report")
         smart_money_report = result_data.get("smart_money_report")
         volume_price_report = result_data.get("volume_price_report")
+        sector_report = result_data.get("sector_report")
+        anti_quant_report = result_data.get("anti_quant_report")
         game_theory_report = result_data.get("game_theory_report")
         investment_plan = result_data.get("investment_plan")
         trader_investment_plan = result_data.get("trader_investment_plan")
@@ -244,6 +247,8 @@ def resolve_report_fields(
         "macro_report": macro_report,
         "smart_money_report": smart_money_report,
         "volume_price_report": volume_price_report,
+        "sector_report": sector_report,
+        "anti_quant_report": anti_quant_report,
         "game_theory_report": game_theory_report,
         "investment_plan": investment_plan,
         "trader_investment_plan": trader_investment_plan,
@@ -418,6 +423,8 @@ def create_report(
         db_report.macro_report = resolved["macro_report"]
         db_report.smart_money_report = resolved["smart_money_report"]
         db_report.volume_price_report = resolved["volume_price_report"]
+        db_report.sector_report = resolved["sector_report"]
+        db_report.anti_quant_report = resolved["anti_quant_report"]
         db_report.game_theory_report = resolved["game_theory_report"]
         db_report.investment_plan = resolved["investment_plan"]
         db_report.trader_investment_plan = resolved["trader_investment_plan"]
@@ -447,6 +454,8 @@ def create_report(
             macro_report=resolved["macro_report"],
             smart_money_report=resolved["smart_money_report"],
             volume_price_report=resolved["volume_price_report"],
+            sector_report=resolved["sector_report"],
+            anti_quant_report=resolved["anti_quant_report"],
             game_theory_report=resolved["game_theory_report"],
             investment_plan=resolved["investment_plan"],
             trader_investment_plan=resolved["trader_investment_plan"],

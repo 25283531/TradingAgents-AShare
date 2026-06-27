@@ -60,6 +60,10 @@ export default function Settings() {
     const [serverFallbackEnabled, setServerFallbackEnabled] = useState(true)
     const [emailReportEnabled, setEmailReportEnabled] = useState(true)
     const [wecomReportEnabled, setWecomReportEnabled] = useState(true)
+    const [minMarketCap, setMinMarketCap] = useState(50)
+    const [minAvgVolume, setMinAvgVolume] = useState(2)
+    const [minPE, setMinPE] = useState(0)
+    const [riskProfile, setRiskProfile] = useState('neutral')
     const [configLoading, setConfigLoading] = useState(false)
     const [saving, setSaving] = useState(false)
     const [saveAllSaving, setSaveAllSaving] = useState(false)
@@ -138,6 +142,10 @@ export default function Settings() {
                 if (Array.isArray(cfg.default_analysts) && cfg.default_analysts.length > 0) {
                     setDefaultAnalysts(cfg.default_analysts)
                 }
+                if (typeof cfg.min_market_cap === 'number') setMinMarketCap(cfg.min_market_cap)
+                if (typeof cfg.min_avg_volume === 'number') setMinAvgVolume(cfg.min_avg_volume)
+                if (typeof cfg.min_pe === 'number') setMinPE(cfg.min_pe)
+                if (cfg.risk_profile) setRiskProfile(cfg.risk_profile)
             })
             .catch(err => {
                 setConfigError(err instanceof Error ? err.message : '无法连接到后端')
@@ -219,6 +227,10 @@ export default function Settings() {
         } : {}),
         ...(options?.includeEmail ? { email_report_enabled: emailReportEnabled } : {}),
         default_analysts: defaultAnalysts,
+        min_market_cap: minMarketCap,
+        min_avg_volume: minAvgVolume,
+        min_pe: minPE,
+        risk_profile: riskProfile,
     })
 
     const showSavedMessage = (message: string) => {
@@ -657,6 +669,107 @@ export default function Settings() {
                         className="input w-full min-h-[80px] resize-y"
                         placeholder="例如：更关注估值安全边际、政策催化与机构资金行为。"
                     />
+                </div>
+            </div>
+
+            <div className="card space-y-4">
+                <div className="flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-red-500" />
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">硬过滤参数（阶段0）</h2>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    进入 Agent 分析前的物理防御，不符合条件的股票将直接被拦截，不消耗任何 Token。
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            最小市值（亿元）
+                        </label>
+                        <input
+                            type="number"
+                            min={10}
+                            max={1000}
+                            step={10}
+                            value={minMarketCap}
+                            onChange={e => setMinMarketCap(Number(e.target.value))}
+                            className="input w-full"
+                            disabled={configLoading}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            默认 50 亿。排除市值过小易被量化控盘的股票。
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            最小日均成交额（亿元）
+                        </label>
+                        <input
+                            type="number"
+                            min={0.5}
+                            max={50}
+                            step={0.5}
+                            value={minAvgVolume}
+                            onChange={e => setMinAvgVolume(Number(e.target.value))}
+                            className="input w-full"
+                            disabled={configLoading}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            默认 2 亿。确保股票具备足够流动性。
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            最小市盈率（PE）
+                        </label>
+                        <input
+                            type="number"
+                            min={-100}
+                            max={100}
+                            step={1}
+                            value={minPE}
+                            onChange={e => setMinPE(Number(e.target.value))}
+                            className="input w-full"
+                            disabled={configLoading}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            默认 0。排除亏损股。设为负数允许分析亏损股。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="card space-y-4">
+                <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 text-blue-500" />
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">风险偏好配置</h2>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                        风控模式
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                        {[
+                            { key: 'aggressive', label: '激进', desc: '允许追涨，止损空间8%' },
+                            { key: 'neutral', label: '中性', desc: '右侧放量确认，均线止损' },
+                            { key: 'conservative', label: '稳健', desc: '缩量回踩才买入，低波动率' },
+                        ].map((profile) => (
+                            <button
+                                key={profile.key}
+                                type="button"
+                                onClick={() => setRiskProfile(profile.key)}
+                                className={`rounded-xl border px-4 py-3 text-sm transition-colors text-left ${
+                                    riskProfile === profile.key
+                                        ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
+                                        : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400'
+                                }`}
+                            >
+                                <div className="font-medium">{profile.label}</div>
+                                <div className="text-xs opacity-70 mt-0.5">{profile.desc}</div>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 

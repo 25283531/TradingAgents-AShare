@@ -116,6 +116,16 @@ def _ensure_report_schema() -> None:
                 conn.execute(text("ALTER TABLE reports ADD COLUMN game_theory_report TEXT"))
             if "volume_price_report" not in columns:
                 conn.execute(text("ALTER TABLE reports ADD COLUMN volume_price_report TEXT"))
+            if "sector_report" not in columns:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN sector_report TEXT"))
+            if "anti_quant_report" not in columns:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN anti_quant_report TEXT"))
+            if "investment_plan" not in columns:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN investment_plan TEXT"))
+            if "trader_investment_plan" not in columns:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN trader_investment_plan TEXT"))
+            if "final_trade_decision" not in columns:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN final_trade_decision TEXT"))
     except Exception as e:
         logger.error("Failed to ensure report schema: %s", e)
 
@@ -142,6 +152,14 @@ def _ensure_user_schema() -> None:
                 conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN stagger_delay INTEGER DEFAULT 1"))
             if "batch_concurrency" not in llm_columns:
                 conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN batch_concurrency INTEGER DEFAULT 3"))
+            if "min_market_cap" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN min_market_cap INTEGER DEFAULT 50"))
+            if "min_avg_volume" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN min_avg_volume INTEGER DEFAULT 2"))
+            if "min_pe" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN min_pe INTEGER DEFAULT 0"))
+            if "risk_profile" not in llm_columns:
+                conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN risk_profile VARCHAR(20) DEFAULT 'neutral'"))
     except Exception as e:
         logger.error("Failed to ensure user schema: %s", e)
 

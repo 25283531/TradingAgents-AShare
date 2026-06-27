@@ -262,6 +262,8 @@ export interface AnalysisReport {
     macro_report?: string
     smart_money_report?: string
     volume_price_report?: string
+    sector_report?: string
+    anti_quant_report?: string
     game_theory_report?: string
     game_theory_signals?: GameTheorySignals
     investment_plan?: string
@@ -354,6 +356,8 @@ export interface ReportDetail extends Report {
     macro_report?: string
     smart_money_report?: string
     volume_price_report?: string
+    sector_report?: string
+    anti_quant_report?: string
     game_theory_report?: string
     investment_plan?: string
     trader_investment_plan?: string

@@ -580,13 +580,15 @@ FIXED_TEAMS = {
         "Macro Analyst",
         "Smart Money Analyst",
         "Volume Price Analyst",
+        "Sector Rotation Analyst",
+        "Anti-Quant Trap Analyst",
     ],
     "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
     "Trading Team": ["Trader"],
     "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
     "Portfolio Management": ["Portfolio Manager"],
 }
-ANALYST_ORDER = ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price"]
+ANALYST_ORDER = ["market", "social", "news", "fundamentals", "macro", "smart_money", "volume_price", "sector_rotation", "anti_quant_trap"]
 ANALYST_AGENT_NAMES = {
     "market": "Market Analyst",
     "social": "Social Analyst",
@@ -595,6 +597,8 @@ ANALYST_AGENT_NAMES = {
     "macro": "Macro Analyst",
     "volume_price": "Volume Price Analyst",
     "smart_money": "Smart Money Analyst",
+    "sector_rotation": "Sector Rotation Analyst",
+    "anti_quant_trap": "Anti-Quant Trap Analyst",
     "bull": "Bull Researcher",
     "bear": "Bear Researcher",
     "Bull_Initial": "Bull Researcher",
@@ -616,6 +620,8 @@ ANALYST_REPORT_MAP = {
     "macro": "macro_report",
     "smart_money": "smart_money_report",
     "volume_price": "volume_price_report",
+    "sector_rotation": "sector_report",
+    "anti_quant_trap": "anti_quant_report",
 }
 
 # All analysts always run — each uses its own natural time window
@@ -1253,6 +1259,8 @@ def _build_result_payload(final_state: Dict[str, Any]) -> Dict[str, Any]:
         "macro_report": final_state.get("macro_report"),
         "smart_money_report": final_state.get("smart_money_report"),
         "volume_price_report": final_state.get("volume_price_report"),
+        "sector_report": final_state.get("sector_report"),
+        "anti_quant_report": final_state.get("anti_quant_report"),
         "game_theory_report": final_state.get("game_theory_report"),
         "game_theory_signals": final_state.get("game_theory_signals"),
         "analyst_traces": final_state.get("analyst_traces"),
@@ -1290,6 +1298,8 @@ class AgentProgressTracker:
             "macro_report": None,
             "smart_money_report": None,
             "volume_price_report": None,
+            "sector_report": None,
+            "anti_quant_report": None,
             "game_theory_report": None,
             "investment_plan": None,
             "trader_investment_plan": None,
@@ -1435,6 +1445,8 @@ class AgentProgressTracker:
             "sentiment_report": "舆情分析",
             "news_report": "新闻分析",
             "fundamentals_report": "基本面分析",
+            "sector_report": "行业轮动分析",
+            "anti_quant_report": "防量化陷阱分析",
             "investment_plan": "投资计划",
             "trader_investment_plan": "交易计划",
             "final_trade_decision": "最终交易决策",
@@ -1827,6 +1839,7 @@ async def _run_job_inner(
             report_keys = (
                 "market_report", "sentiment_report", "news_report", "fundamentals_report",
                 "macro_report", "smart_money_report", "volume_price_report",
+                "sector_report", "anti_quant_report",
                 "investment_plan", "trader_investment_plan", "final_trade_decision",
             )
 
@@ -2093,6 +2106,8 @@ async def _run_job_inner(
                 "macro_report",
                 "smart_money_report",
                 "volume_price_report",
+                "sector_report",
+                "anti_quant_report",
                 "investment_plan",
                 "trader_investment_plan",
                 "final_trade_decision",

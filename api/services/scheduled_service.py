@@ -14,7 +14,7 @@ VALID_HORIZONS = {"short", "medium"}
 
 
 def _validate_trigger_time(t: str) -> str:
-    """Validate HH:MM format. Allowed: 20:00~23:59 or 00:00~08:00."""
+    """Validate HH:MM format. Allowed: any time within 24 hours."""
     parts = t.strip().split(":")
     if len(parts) != 2:
         raise ValueError("时间格式错误，请使用 HH:MM")
@@ -24,10 +24,6 @@ def _validate_trigger_time(t: str) -> str:
         raise ValueError("时间格式错误，请使用 HH:MM")
     if not (0 <= hh <= 23 and 0 <= mm <= 59):
         raise ValueError("时间格式错误，请使用 HH:MM")
-    time_val = hh * 60 + mm
-    # Allowed: 20:00 (1200) ~ 23:59 (1439) or 00:00 (0) ~ 08:00 (480)
-    if 8 * 60 < time_val < 20 * 60:
-        raise ValueError("定时时间仅允许 20:00~次日 08:00（避免影响白天使用）")
     return f"{hh:02d}:{mm:02d}"
 
 

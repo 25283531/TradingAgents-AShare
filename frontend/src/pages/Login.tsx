@@ -95,13 +95,13 @@ export default function Login() {
 
                         <div className="mt-10 max-w-3xl">
                             <h1 className="text-5xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-white md:text-7xl">
-                                为投研决策
+                                TradingAgents
                                 <span className="mt-2 block bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                                    设计的智能工作台
+                                    A股多智能体研究系统
                                 </span>
                             </h1>
                             <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300 md:text-lg">
-                                从市场、舆情、新闻、基本面、宏观、主力资金到风控与组合决策，将 14 个 Agent 的协作过程沉淀为可追踪、可复盘、可持续更新的研究链路。
+                                基于多智能体协作架构，实现从数据采集、分析研究到交易决策的全流程自动化。支持实时行情跟踪、智能分析报告生成、定时任务调度等功能，助力投资者做出更明智的决策。
                             </p>
                         </div>
 
@@ -256,13 +256,17 @@ export default function Login() {
 
             <footer className="mx-auto max-w-7xl pb-4 pt-2 text-center text-xs text-slate-400 dark:text-slate-500">
                 <p>
-                    &copy; {new Date().getFullYear()} KylinMountain &middot; 仅限非商业用途（PolyForm NC 1.0） &middot;{' '}
-                    <a href="https://github.com/KylinMountain/TradingAgents-AShare" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300">
+                    &copy; {new Date().getFullYear()} TradingAgents-AShare &middot; 基于 TradingAgents 开源项目二次开发 &middot;{' '}
+                    <a href="https://github.com/25283531/TradingAgents-AShare" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300">
                         GitHub
                     </a>
                     {' '}&middot;{' '}
-                    <a href="https://app.510168.xyz" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300">
+                    <a href="https://gupiao.hnpds.eu.org:32123/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300">
                         官网
+                    </a>
+                    {' '}&middot;{' '}
+                    <a href="https://github.com/TauricResearch/TradingAgents" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300">
+                        上游项目
                     </a>
                 </p>
             </footer>

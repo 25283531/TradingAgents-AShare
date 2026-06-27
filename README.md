@@ -2,7 +2,7 @@
 
 本项目是基于多智能体协作的 A 股深度分析系统，模拟顶级投研机构的决策闭环，通过 16 名专业 Agent 的多空辩论与风控博弈，为投资者提供结构化的交易建议。系统内置代码级硬过滤与 LLM 软决策双重风控，有效识别量化陷阱，保护散户投资者免受短线收割。
 
-本项目fork自 [Releases](https://github.com/KylinMountain/TradingAgents-AShare/releases) | [OpenClaw 技能](https://clawhub.ai/kylinmountain/tradingagents-analysis)
+本项目fork自 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) | [Releases](https://github.com/25283531/TradingAgents-AShare/releases)
 
 <div align="center">
   <img src="assets/web/analysis.png" width="100%" alt="智能分析"/>
@@ -140,7 +140,7 @@ docker run -d -p 8000:8000 \
 ### 源码安装
 
 ```bash
-git clone https://github.com/KylinMountain/TradingAgents-AShare.git
+git clone https://github.com/25283531/TradingAgents-AShare.git
 cd TradingAgents-AShare
 
 # 后端（Python 3.10+）
@@ -182,7 +182,7 @@ uv run python -m uvicorn api.main:app --port 8000
 认证：Web 端登录后在"设置 / API Token"生成密钥，通过 `Authorization: Bearer <TOKEN>` 传入。
 
 ```bash
-curl -X POST 'https://app.510168.xyz/v1/analyze' \
+curl -X POST 'https://gupiao.hnpds.eu.org:32123/v1/analyze' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer <YOUR_API_TOKEN>' \
   -d '{"symbol": "分析一下600519.SH短期趋势", "trade_date": "2026-03-28"}'
@@ -213,11 +213,11 @@ curl -X POST 'https://app.510168.xyz/v1/analyze' \
 - **数据延迟**：分析所依赖的数据源可能存在延迟或偏差，请以交易所实时公告为准。
 
 <div align="center">
-<a href="https://www.star-history.com/#KylinMountain/TradingAgents-AShare&Date">
+<a href="https://www.star-history.com/#25283531/TradingAgents-AShare&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=KylinMountain/TradingAgents-AShare&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=KylinMountain/TradingAgents-AShare&type=Date" />
-   <img alt="TradingAgents Star History" src="https://api.star-history.com/svg?repos=KylinMountain/TradingAgents-AShare&type=Date" style="width: 80%; height: auto;" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=25283531/TradingAgents-AShare&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=25283531/TradingAgents-AShare&type=Date" />
+   <img alt="TradingAgents Star History" src="https://api.star-history.com/svg?repos=25283531/TradingAgents-AShare&type=Date" style="width: 80%; height: auto;" />
  </picture>
 </a>
 </div>

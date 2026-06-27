@@ -21,6 +21,7 @@ interface PositionRow {
     current_position: string
     average_cost: string
     market_value: string
+    nameLoading: boolean
 }
 
 export default function PositionImportForm({ onSave, onCancel }: PositionImportFormProps) {
@@ -31,6 +32,7 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
         current_position: '',
         average_cost: '',
         market_value: '',
+        nameLoading: false,
     }])
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState<StockSearchResult[]>([])
@@ -40,6 +42,7 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
     const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
     const dropdownRef = useRef<HTMLDivElement>(null)
+    const nameTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -76,7 +79,7 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
     const handleStockSelect = useCallback((rowId: string, stock: StockSearchResult) => {
         setPositions(prev => prev.map(row =>
             row.id === rowId
-                ? { ...row, symbol: stock.symbol, name: stock.name }
+                ? { ...row, symbol: stock.symbol, name: stock.name, nameLoading: false }
                 : row
         ))
         setSearchQuery('')
@@ -93,12 +96,19 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
             current_position: '',
             average_cost: '',
             market_value: '',
+            nameLoading: false,
         }])
     }, [])
 
     const handleRemoveRow = useCallback((rowId: string) => {
         if (positions.length > 1) {
             setPositions(prev => prev.filter(row => row.id !== rowId))
+            // Clear any pending name lookup timer
+            const timer = nameTimerRef.current.get(rowId)
+            if (timer) {
+                clearTimeout(timer)
+                nameTimerRef.current.delete(rowId)
+            }
         }
     }, [positions.length])
 
@@ -108,6 +118,68 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
                 ? { ...row, [field]: value }
                 : row
         ))
+    }, [])
+
+    const handleSymbolBlur = useCallback((rowId: string, symbol: string) => {
+        // Auto-fetch stock name when symbol is entered
+        const trimmedSymbol = symbol.trim().toUpperCase()
+        if (!trimmedSymbol || trimmedSymbol.length < 6) {
+            return
+        }
+
+        // Check if it looks like a stock code (6 digits or alphanumeric)
+        if (!/^[0-9A-Z]{6}$/.test(trimmedSymbol)) {
+            return
+        }
+
+        // Set loading state
+        setPositions(prev => prev.map(row =>
+            row.id === rowId
+                ? { ...row, nameLoading: true }
+                : row
+        ))
+
+        // Debounce the name lookup
+        const existingTimer = nameTimerRef.current.get(rowId)
+        if (existingTimer) {
+            clearTimeout(existingTimer)
+        }
+
+        const timer = setTimeout(async () => {
+            try {
+                const res = await api.searchStocks(trimmedSymbol)
+                const exactMatch = res.results.find(s => s.symbol === trimmedSymbol)
+                if (exactMatch) {
+                    setPositions(prev => prev.map(row =>
+                        row.id === rowId
+                            ? { ...row, name: exactMatch.name, nameLoading: false }
+                            : row
+                    ))
+                } else if (res.results.length > 0) {
+                    // Use first result if no exact match
+                    setPositions(prev => prev.map(row =>
+                        row.id === rowId
+                            ? { ...row, name: res.results[0].name, nameLoading: false }
+                            : row
+                    ))
+                } else {
+                    setPositions(prev => prev.map(row =>
+                        row.id === rowId
+                            ? { ...row, nameLoading: false }
+                            : row
+                    ))
+                }
+            } catch {
+                setPositions(prev => prev.map(row =>
+                    row.id === rowId
+                        ? { ...row, nameLoading: false }
+                        : row
+                ))
+            }
+            nameTimerRef.current.delete(rowId)
+        }, 300)
+
+        nameTimerRef.current.set(rowId, timer)
     }, [])
 
     const handleSubmit = useCallback(() => {
@@ -160,8 +232,12 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
                                         onFocus={() => {
                                             setFocusedRowId(row.id)
                                             setSelectedRowId(row.id)
+                                            setSearchQuery(e.target.value)
                                         }}
-                                        onBlur={() => setTimeout(() => setFocusedRowId(null), 200)}
+                                        onBlur={e => {
+                                            setTimeout(() => setFocusedRowId(null), 200)
+                                            handleSymbolBlur(row.id, e.target.value)
+                                        }}
                                         placeholder="股票代码"
                                         className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500"
                                     />
@@ -191,13 +267,19 @@ export default function PositionImportForm({ onSave, onCancel }: PositionImportF
                                 </div>
 
                                 {/* Name */}
-                                <input
-                                    type="text"
-                                    value={row.name}
-                                    onChange={e => handleInputChange(row.id, 'name', e.target.value)}
-                                    placeholder="股票名称"
-                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={row.name}
+                                        onChange={e => handleInputChange(row.id, 'name', e.target.value)}
+                                        placeholder="股票名称"
+                                        disabled={row.nameLoading}
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:disabled:bg-slate-700/50"
+                                    />
+                                    {row.nameLoading && (
+                                        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
+                                    )}
+                                </div>
 
                                 {/* Position */}
                                 <input

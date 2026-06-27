@@ -3,7 +3,8 @@ import { ArrowLeft, Github, Heart, Cpu, Code2, ExternalLink } from 'lucide-react
 import { useNavigate } from 'react-router-dom'
 import { getBaseUrl } from '@/services/api'
 
-const GITHUB_REPO = 'KylinMountain/TradingAgents-AShare'
+const GITHUB_REPO = '25283531/TradingAgents-AShare'
+const UPSTREAM_REPO = 'TauricResearch/TradingAgents'
 const GITHUB_API = `https://api.github.com/repos/${GITHUB_REPO}/contributors?per_page=100`
 const CACHE_KEY = 'ta-contributors-cache'
 const CACHE_TTL = 10 * 60 * 1000 // 10 minutes

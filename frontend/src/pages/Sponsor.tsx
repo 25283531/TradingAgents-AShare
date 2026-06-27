@@ -1,7 +1,7 @@
 import { Heart, Github, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-const GITHUB_URL = 'https://github.com/KylinMountain/TradingAgents-AShare'
+const GITHUB_URL = 'https://github.com/25283531/TradingAgents-AShare'
 
 export default function Sponsor() {
     const navigate = useNavigate()
@@ -25,7 +25,7 @@ export default function Sponsor() {
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 font-medium">微信支付</p>
                                 <div className="inline-block rounded-2xl border border-slate-200 dark:border-slate-700 p-3 bg-white">
                                     <img
-                                        src="/wechatpay.jpg"
+                                        src="/wechat_new.png"
                                         alt="微信收款码"
                                         className="w-48 h-48 object-contain"
                                     />
@@ -36,7 +36,7 @@ export default function Sponsor() {
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 font-medium">支付宝</p>
                                 <div className="inline-block rounded-2xl border border-slate-200 dark:border-slate-700 p-3 bg-white">
                                     <img
-                                        src="/alipay.jpg"
+                                        src="/alipay_new.png"
                                         alt="支付宝收款码"
                                         className="w-48 h-48 object-contain"
                                     />

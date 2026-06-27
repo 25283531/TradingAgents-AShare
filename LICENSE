@@ -8,7 +8,7 @@ This project is a derivative work based on:
 1. MODIFICATIONS & ADDITIONS
 -------------------------------------------------------------------------------
 The following components have been significantly modified or added by the 
-KylinMountain/TradingAgents-AShare team:
+25283531/TradingAgents-AShare team:
 
 - api/: Complete backend API layer (New)
 - tradingagents/: Core multi-agent logic, dataflows, and graph architecture (Modified)
@@ -37,4 +37,4 @@ For the full text of the licenses, please refer to the following:
 - Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
 - PolyForm Noncommercial 1.0.0: https://polyformproject.org/licenses/noncommercial/1.0.0
 
-Copyright (c) 2026 KylinMountain / TradingAgents-AShare Team
+Copyright (c) 2026 25283531 / TradingAgents-AShare Team

@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/uploads/(.*)",
-      "destination": "https://api.510168.xyz/uploads/$1"
+      "destination": "https://gupiao.hnpds.eu.org:32123/uploads/$1"
     },
     {
       "source": "/((?!assets/|uploads/|vite.svg|favicon.ico).*)",

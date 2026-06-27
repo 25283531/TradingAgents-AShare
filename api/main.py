@@ -99,7 +99,7 @@ def _report_version_stats() -> None:
     def _send():
         try:
             requests.post(
-                "https://app.510168.xyz/api/version-stats",
+                "https://gupiao.hnpds.eu.org:32123/api/version-stats",
                 json={"v": APP_VERSION, "nonce": uuid.uuid4().hex},
                 timeout=30,
             )
@@ -264,6 +264,11 @@ async def lifespan(app: FastAPI):
     # Pre-load stock + ETF name map
     await asyncio.to_thread(_load_cn_stock_map)
     _log("Stock map pre-loaded on startup.")
+    
+    # Start scheduled task loop
+    _create_tracked_task(_scheduled_task_loop(), label="Scheduled task scheduler")
+    _log("Scheduled task scheduler started.")
+    
     yield
     _log("Shutting down: Cleaning up resources...")
     _executor.shutdown(wait=True)
@@ -432,6 +437,90 @@ def _create_tracked_task(coro, *, label: str = "Background task") -> asyncio.Tas
 
     task.add_done_callback(_on_done)
     return task
+
+
+async def _scheduled_task_loop():
+    """Background loop that checks and triggers scheduled tasks.
+    
+    Runs every 60 seconds to check for tasks whose trigger_time has passed
+    and haven't run today yet.
+    """
+    from api.services.scheduled_service import get_pending_tasks, mark_run_success, mark_run_failed
+    from tradingagents.dataflows.trade_calendar import cn_today_str
+    
+    _log("[Scheduler] Starting scheduled task loop (checking every 60s)")
+    
+    while True:
+        try:
+            await asyncio.sleep(60)  # Check every 60 seconds
+            
+            now = datetime.now(timezone.utc)
+            # Convert UTC to China time (UTC+8)
+            china_time = now.astimezone(timezone(timedelta(hours=8)))
+            current_hhmm = china_time.strftime("%H:%M")
+            today = cn_today_str()
+            
+            with get_db_ctx() as db:
+                pending_tasks = await asyncio.to_thread(get_pending_tasks, db, today, current_hhmm)
+                
+                if not pending_tasks:
+                    continue
+                    
+                _log(f"[Scheduler] Found {len(pending_tasks)} pending tasks at {current_hhmm}")
+                
+                for task in pending_tasks:
+                    task_id = task.id
+                    user_id = task.user_id
+                    symbol = task.symbol
+                    horizon = task.horizon or "short"
+                    
+                    # Mark as running to prevent duplicate execution
+                    task.last_run_status = "running"
+                    db.commit()
+                    
+                    job_id = uuid4().hex
+                    
+                    try:
+                        # Build user context from imported positions
+                        scheduled_user_context = _build_imported_user_context(db, user_id, symbol)
+                        request = _build_scheduled_analyze_request(
+                            db=db,
+                            user_id=user_id,
+                            symbol=symbol,
+                            horizon=horizon,
+                            trade_date=today,
+                            scheduled_user_context=scheduled_user_context,
+                        )
+                        
+                        _log(f"[Scheduler] Triggering {symbol} (task={task_id}, job={job_id})")
+                        
+                        # Run the job
+                        await _run_job(
+                            job_id,
+                            request,
+                            True,
+                            True,
+                            user_id,
+                            "scheduler",
+                            job_timeout=_get_user_job_timeout(user_id),
+                        )
+                        
+                        final_status = _get_job(job_id).get("status", "completed")
+                        
+                        if final_status == "completed":
+                            await asyncio.to_thread(mark_run_success, db, task_id, today, job_id)
+                            _log(f"[Scheduler] Task {task_id} completed successfully")
+                        else:
+                            await asyncio.to_thread(mark_run_failed, db, task_id, today)
+                            _log(f"[Scheduler] Task {task_id} failed with status {final_status}")
+                            
+                    except Exception as exc:
+                        logger.error("[Scheduler] Task %s failed: %s\n%s", task_id, exc, traceback.format_exc())
+                        await asyncio.to_thread(mark_run_failed, db, task_id, today)
+                        
+        except Exception as exc:
+            logger.error("[Scheduler] Loop error: %s\n%s", exc, traceback.format_exc())
+            await asyncio.sleep(60)  # Wait before retrying
 
 
 def _log(msg: str):

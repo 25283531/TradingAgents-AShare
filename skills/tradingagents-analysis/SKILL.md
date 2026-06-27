@@ -9,8 +9,8 @@ description: >-
   15 specialized analysts collaborate across technical analysis, fundamental analysis,
   sentiment analysis, smart money flow tracking, macro economics, and game theory
   to deliver structured buy/sell/hold recommendations with risk assessment.
-homepage: https://app.510168.xyz
-repository: https://github.com/KylinMountain/TradingAgents-AShare
+homepage: https://gupiao.hnpds.eu.org:32123
+repository: https://github.com/25283531/TradingAgents-AShare
 tags:
   - stock-analysis
   - A-share
@@ -69,7 +69,7 @@ metadata:
         - bash
     primaryEnv: TRADINGAGENTS_TOKEN
     emoji: "📈"
-    homepage: https://app.510168.xyz
+    homepage: https://gupiao.hnpds.eu.org:32123
 ---
 
 # TradingAgents 多智能体 A 股投研分析
@@ -131,9 +131,9 @@ Use the TradingAgents API to let **15 specialized AI analysts** conduct deep, fi
 ## 🔒 隐私与安全
 
 - **发送范围**：本技能**仅**从对话中提取股票名称/代码、分析日期、分析视角等参数，将其作为 `symbol`/`trade_date`/`horizons` 字段发送至后端 API。**不发送对话原文、不读取本地文件、不上传任何其他隐私数据。**
-- **令牌安全**：`TRADINGAGENTS_TOKEN`（格式 `ta-sk-*`）是访问后端的唯一凭证，请使用最小权限令牌，如怀疑泄露请立即在 [app.510168.xyz](https://app.510168.xyz) 吊销并重新生成。
+- **令牌安全**：`TRADINGAGENTS_TOKEN`（格式 `ta-sk-*`）是访问后端的唯一凭证，请使用最小权限令牌，如怀疑泄露请立即在 [gupiao.hnpds.eu.org:32123](https://gupiao.hnpds.eu.org:32123) 吊销并重新生成。
 - **敏感内容提示**：请勿在分析请求中粘贴个人账户信息、真实持仓或其他敏感内容，本技能无法阻止用户主动提交这些内容。
-- **自托管**：如需完全掌控数据流向，可参考 [GitHub 文档](https://github.com/KylinMountain/TradingAgents-AShare) 自行部署后端，并将 `TRADINGAGENTS_API_URL` 指向自建服务器。
+- **自托管**：如需完全掌控数据流向，可参考 [GitHub 文档](https://github.com/25283531/TradingAgents-AShare) 自行部署后端，并将 `TRADINGAGENTS_API_URL` 指向自建服务器。
 
 > **关于凭证元数据**：本技能的 frontmatter 在 `metadata.openclaw` 中声明了 `TRADINGAGENTS_TOKEN` 为 `primaryEnv`，并列入 `requires.env`。
 
@@ -142,7 +142,7 @@ Use the TradingAgents API to let **15 specialized AI analysts** conduct deep, fi
 - **What is sent**: Only the extracted stock symbol, trade date, and analysis parameters (`symbol`, `trade_date`, `horizons`) are transmitted to the backend. The raw conversation text is **never** forwarded.
 - **Token**: `TRADINGAGENTS_TOKEN` (pattern `ta-sk-*`) is the sole credential. Use a minimal-privilege token and rotate it immediately if compromised.
 - **Sensitive content**: Do not paste personal account data, real positions, or other sensitive information into analysis requests.
-- **Self-hosting**: For full data sovereignty, deploy the backend yourself and set `TRADINGAGENTS_API_URL` to your server. See the [GitHub repo](https://github.com/KylinMountain/TradingAgents-AShare).
+- **Self-hosting**: For full data sovereignty, deploy the backend yourself and set `TRADINGAGENTS_API_URL` to your server. See the [GitHub repo](https://github.com/25283531/TradingAgents-AShare).
 
 > **Credential metadata**: This skill's frontmatter declares `TRADINGAGENTS_TOKEN` as `primaryEnv` under `metadata.openclaw.requires.env`.
 
@@ -150,7 +150,7 @@ Use the TradingAgents API to let **15 specialized AI analysts** conduct deep, fi
 
 **方式一：使用官方托管服务（零部署，开箱即用）**
 
-1. 登录 [https://app.510168.xyz](https://app.510168.xyz)
+1. 登录 [https://gupiao.hnpds.eu.org:32123](https://gupiao.hnpds.eu.org:32123)
 2. 进入 **Settings → API Tokens** 创建令牌
 3. 配置环境变量：
 ```bash
@@ -162,7 +162,7 @@ export TRADINGAGENTS_TOKEN="ta-sk-your_key_here"
 如对数据隐私有要求，可自行部署后端，所有分析数据仅在你自己的服务器上处理：
 
 ```bash
-# 1. 部署后端，参考 https://github.com/KylinMountain/TradingAgents-AShare
+# 1. 部署后端，参考 https://github.com/25283531/TradingAgents-AShare
 # 2. 将 API 地址指向自建服务
 export TRADINGAGENTS_API_URL="http://your-server:8000"
 export TRADINGAGENTS_TOKEN="ta-sk-your_key_here"
@@ -199,7 +199,7 @@ bash scripts/analyze.sh 600519.SH,002594.SZ,300750.SZ 2026-03-22
 
 1. 提交分析任务
 ```bash
-curl -X POST "${TRADINGAGENTS_API_URL:-https://api.510168.xyz}/v1/analyze" \
+curl -X POST "${TRADINGAGENTS_API_URL:-https://gupiao.hnpds.eu.org:32123}/v1/analyze" \
   -H "Authorization: Bearer $TRADINGAGENTS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"symbol": "贵州茅台"}'
@@ -207,13 +207,13 @@ curl -X POST "${TRADINGAGENTS_API_URL:-https://api.510168.xyz}/v1/analyze" \
 
 2. 查询任务状态
 ```bash
-curl "${TRADINGAGENTS_API_URL:-https://api.510168.xyz}/v1/jobs/{job_id}" \
+curl "${TRADINGAGENTS_API_URL:-https://gupiao.hnpds.eu.org:32123}/v1/jobs/{job_id}" \
   -H "Authorization: Bearer $TRADINGAGENTS_TOKEN"
 ```
 
 3. 获取完整分析结果（任务完成后）
 ```bash
-curl "${TRADINGAGENTS_API_URL:-https://api.510168.xyz}/v1/jobs/{job_id}/result" \
+curl "${TRADINGAGENTS_API_URL:-https://gupiao.hnpds.eu.org:32123}/v1/jobs/{job_id}/result" \
   -H "Authorization: Bearer $TRADINGAGENTS_TOKEN"
 ```
 

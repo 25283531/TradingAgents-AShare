@@ -646,6 +646,10 @@ export interface RuntimeConfig {
     email_report_enabled?: boolean
     wecom_report_enabled?: boolean
     default_analysts?: string[]
+    min_market_cap?: number
+    min_avg_volume?: number
+    min_pe?: number
+    risk_profile?: string
 }
 
 export interface RuntimeConfigUpdateResponse {
@@ -675,6 +679,10 @@ export interface RuntimeConfigUpdate {
     default_analysts?: string[]
     warmup?: boolean
     force_warmup?: boolean
+    min_market_cap?: number
+    min_avg_volume?: number
+    min_pe?: number
+    risk_profile?: string
 }
 
 export interface RuntimeWarmupRequest extends RuntimeConfigUpdate {

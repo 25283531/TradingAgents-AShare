@@ -61,15 +61,15 @@ class WorkflowV2:
     ]
 
     ANALYST_DISPLAY_NAMES = {
-        "market": "技术面",
-        "volume_price": "量价",
-        "fundamentals": "基本面",
-        "smart_money": "主力资金",
-        "macro": "宏观",
-        "news": "新闻",
-        "social": "舆情",
-        "sector_rotation": "行业轮动",
-        "anti_quant_trap": "防量化陷阱",
+        "market": "Market",
+        "volume_price": "Volume Price",
+        "fundamentals": "Fundamentals",
+        "smart_money": "Smart Money",
+        "macro": "Macro",
+        "news": "News",
+        "social": "Social",
+        "sector_rotation": "Sector Rotation",
+        "anti_quant_trap": "Anti-Quant Trap",
     }
 
     def __init__(

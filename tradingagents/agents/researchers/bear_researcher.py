@@ -22,6 +22,8 @@ def create_bear_researcher(llm, memory):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         volume_price_report = state.get("volume_price_report", "")
+        smart_money_report = state.get("smart_money_report", "")
+        macro_report = state.get("macro_report", "")
         sector_report = state.get("sector_report", "")
         anti_quant_report = state.get("anti_quant_report", "")
         claims = investment_debate_state.get("claims", [])
@@ -49,6 +51,8 @@ def create_bear_researcher(llm, memory):
             news_report=news_report,
             fundamentals_report=fundamentals_report,
             volume_price_report=volume_price_report,
+            smart_money_report=smart_money_report,
+            macro_report=macro_report,
             sector_report=sector_report,
             anti_quant_report=anti_quant_report,
             history=history,

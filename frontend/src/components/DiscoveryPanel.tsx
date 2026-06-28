@@ -7,6 +7,14 @@ interface DiscoveryPanelProps {
     onSymbolSelect: (symbol: string) => void
 }
 
+/** 将纯数字代码转换为带交易所后缀的 symbol */
+function normalizeSymbol(code: string): string {
+    const c = code.trim()
+    if (c.includes('.')) return c.toUpperCase()
+    if (c.startsWith('6') || c.startsWith('9')) return `${c}.SH`
+    return `${c}.SZ`
+}
+
 export default function DiscoveryPanel({ onSymbolSelect }: DiscoveryPanelProps) {
     const [recommendations, setRecommendations] = useState<Recommendation[]>([])
     const [loading, setLoading] = useState(true)
@@ -20,7 +28,8 @@ export default function DiscoveryPanel({ onSymbolSelect }: DiscoveryPanelProps) 
         api.getRecommendations()
             .then(res => {
                 if (cancelled) return
-                setRecommendations(res.stocks)
+                const stocks = res.stocks.map(s => ({ ...s, symbol: normalizeSymbol(s.symbol) }))
+                setRecommendations(stocks)
             })
             .catch(err => {
                 if (cancelled) return
@@ -40,7 +49,8 @@ export default function DiscoveryPanel({ onSymbolSelect }: DiscoveryPanelProps) 
         setLoading(true)
         api.getRecommendations()
             .then(res => {
-                setRecommendations(res.stocks)
+                const stocks = res.stocks.map(s => ({ ...s, symbol: normalizeSymbol(s.symbol) }))
+                setRecommendations(stocks)
                 setError(null)
             })
             .catch(err => {

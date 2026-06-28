@@ -2,44 +2,61 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TrendingUp, TrendingDown, Minus, ArrowRight, RefreshCw, Search, Filter, X, Play } from 'lucide-react'
 import type { Recommendation } from '@/types'
+import { useDiscoveryStore } from '@/stores/discoveryStore'
+
+/** 将纯数字代码转换为带交易所后缀的 symbol */
+function normalizeSymbol(code: string): string {
+    const c = code.trim()
+    if (c.includes('.')) return c.toUpperCase()
+    if (c.startsWith('6') || c.startsWith('9')) return `${c}.SH`
+    return `${c}.SZ`
+}
 
 export default function Discovery() {
-    const [recommendations, setRecommendations] = useState<Recommendation[]>([])
-    const [loading, setLoading] = useState(false)
-    const [loaded, setLoaded] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const navigate = useNavigate()
+    const {
+        recommendations,
+        setRecommendations,
+        loading,
+        setLoading,
+        loaded,
+        setLoaded,
+        error,
+        setError,
+        progress,
+        setProgress,
+        logs,
+        addLog,
+        clearLogs,
+        analysisTime,
+        setAnalysisTime,
+    } = useDiscoveryStore()
+
     const [searchTerm, setSearchTerm] = useState('')
     const [filterBullish, setFilterBullish] = useState<boolean | null>(null)
-    const [progress, setProgress] = useState(0)
-    const [logs, setLogs] = useState<string[]>([])
-    const navigate = useNavigate()
-
-    const addLog = (message: string) => {
-        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`])
-    }
 
     const fetchRecommendations = () => {
         if (loading) return
-        
+
         setLoading(true)
         setError(null)
         setProgress(0)
-        setLogs([])
-        
+        clearLogs()
+
         addLog('开始获取中线趋势股推荐...')
 
         // 使用 SSE 获取实时进度
         const eventSource = new EventSource('/api/recommendation/stream')
-        
+
         eventSource.onmessage = (event) => {
             if (event.data === '[DONE]') {
                 eventSource.close()
                 return
             }
-            
+
             try {
                 const data = JSON.parse(event.data)
-                
+
                 if (data.type === 'log') {
                     addLog(data.message)
                 } else if (data.type === 'progress') {
@@ -47,10 +64,22 @@ export default function Discovery() {
                     addLog(`${data.step} (${data.current}/${data.total})`)
                 } else if (data.type === 'result') {
                     addLog(`获取到 ${data.stocks.length} 只推荐股票`)
-                    setRecommendations(data.stocks)
+                    // 为每只股票添加 normalized symbol
+                    const stocks: Recommendation[] = data.stocks.map((s: Recommendation) => ({
+                        ...s,
+                        symbol: normalizeSymbol(s.symbol),
+                    }))
+                    setRecommendations(stocks)
                     setLoaded(true)
                     setProgress(100)
                     setLoading(false)
+                    setAnalysisTime(new Date().toLocaleString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                    }))
                     eventSource.close()
                 } else if (data.type === 'error') {
                     addLog(`错误: ${data.message}`)
@@ -62,7 +91,7 @@ export default function Discovery() {
                 console.error('Failed to parse SSE data:', e)
             }
         }
-        
+
         eventSource.onerror = (error) => {
             console.error('SSE error:', error)
             addLog('连接错误，请重试')
@@ -110,7 +139,10 @@ export default function Discovery() {
                     </p>
                 </div>
                 <button
-                    onClick={fetchRecommendations}
+                    onClick={() => {
+                        setAnalysisTime(null)
+                        fetchRecommendations()
+                    }}
                     disabled={loading}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
@@ -258,6 +290,15 @@ export default function Discovery() {
                             </div>
                         </div>
                     </div>
+
+                    {analysisTime && (
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>当前结果于 {analysisTime} 分析产生</span>
+                        </div>
+                    )}
 
                     <div className="card">
                         <div className="flex items-center gap-4 mb-4">

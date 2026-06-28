@@ -101,7 +101,7 @@ class WorkflowV2:
         self.max_risk_discuss_rounds = max_risk_discuss_rounds
         self.factories = _load_agent_factories()
 
-    def setup_graph(self, selected_analysts: Optional[List[str]] = None):
+    def setup_sequential_graph(self, selected_analysts: Optional[List[str]] = None):
         workflow = StateGraph(AgentState)
 
         core_analysts = [a for a in self.CORE_ANALYSTS if a in (selected_analysts or self.CORE_ANALYSTS)]

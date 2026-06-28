@@ -1,0 +1,230 @@
+name: Build Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+          retention-days: 1
+
+  build-windows:
+    needs: build-frontend
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv pip install --system -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller build.spec --noconfirm
+
+      - name: Create installer
+        run: |
+          # Create a simple installer script
+          @"
+          @echo off
+          echo Installing TradingAgents-AShare...
+          mkdir "%APPDATA%\TradingAgents-AShare" 2>nul
+          xcopy "dist\TradingAgents-AShare\*" "%APPDATA%\TradingAgents-AShare\" /E /I /Y
+          echo Creating desktop shortcut...
+          powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut([System.Environment]::GetFolderPath('Desktop') + '\TradingAgents-AShare.lnk'); $Shortcut.TargetPath = '%APPDATA%\TradingAgents-AShare\TradingAgents-AShare.exe'; $Shortcut.WorkingDirectory = '%APPDATA%\TradingAgents-AShare'; $Shortcut.Save()"
+          echo Installation complete!
+          pause
+          "@ | Out-File -FilePath install.bat -Encoding ASCII
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradingagents-windows
+          path: |
+            dist/TradingAgents-AShare/
+            install.bat
+          retention-days: 5
+
+  build-macos:
+    needs: build-frontend
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv pip install --system -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller build.spec --noconfirm
+
+      - name: Create DMG
+        run: |
+          mkdir -p build/dmg
+          cp -r dist/TradingAgents-AShare build/dmg/
+          hdiutil create -volname "TradingAgents-AShare" \
+            -srcfolder build/dmg \
+            -ov -format UDZO \
+            TradingAgents-AShare.dmg
+
+      - name: Upload macOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradingagents-macos
+          path: TradingAgents-AShare.dmg
+          retention-days: 5
+
+  build-linux:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv pip install --system -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller build.spec --noconfirm
+
+      - name: Create AppImage
+        run: |
+          # Download appimagetool
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          # Create AppDir
+          mkdir -p AppDir/usr/bin
+          cp -r dist/TradingAgents-AShare/* AppDir/usr/bin/
+          cp assets/analyst.png AppDir/icon.png
+
+          # Create desktop file
+          cat > AppDir/TradingAgents-AShare.desktop << 'EOF'
+          [Desktop Entry]
+          Name=TradingAgents-AShare
+          Exec=TradingAgents-AShare
+          Icon=icon
+          Type=Application
+          Categories=Finance;
+          EOF
+
+          # Create AppRun
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/TradingAgents-AShare" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Build AppImage
+          ./appimagetool-x86_64.AppImage AppDir TradingAgents-AShare.AppImage
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradingagents-linux
+          path: TradingAgents-AShare.AppImage
+          retention-days: 5
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all builds
+        uses: actions/download-artifact@v4
+        with:
+          path: builds/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            builds/tradingagents-windows/**
+            builds/tradingagents-macos/TradingAgents-AShare.dmg
+            builds/tradingagents-linux/TradingAgents-AShare.AppImage
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

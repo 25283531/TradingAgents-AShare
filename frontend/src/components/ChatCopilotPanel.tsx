@@ -75,6 +75,8 @@ const AGENT_META_MAP: Record<string, { Icon: React.FC<{ className?: string }>; i
     'Macro Analyst':        { Icon: BarChart2,     iconCls: 'text-violet-500',  bgCls: 'bg-violet-100 dark:bg-violet-500/20', label: '宏观' },
     'Smart Money Analyst':  { Icon: DollarSign,    iconCls: 'text-amber-500',   bgCls: 'bg-amber-100 dark:bg-amber-500/20',  label: '主力资金' },
     'Volume Price Analyst': { Icon: Activity,      iconCls: 'text-rose-500',    bgCls: 'bg-rose-100 dark:bg-rose-500/20',    label: '量价' },
+    'Sector Rotation Analyst': { Icon: ArrowBigUp, iconCls: 'text-lime-500',   bgCls: 'bg-lime-100 dark:bg-lime-500/20',    label: '行业轮动' },
+    'Anti-Quant Trap Analyst': { Icon: Shield,     iconCls: 'text-slate-500',  bgCls: 'bg-slate-100 dark:bg-slate-500/20',  label: '防量化陷阱' },
     'Bull Researcher':      { Icon: ArrowBigUp,    iconCls: 'text-emerald-500', bgCls: 'bg-emerald-100 dark:bg-emerald-500/20', label: '多头' },
     'Bear Researcher':      { Icon: ArrowBigDown,  iconCls: 'text-rose-500',    bgCls: 'bg-rose-100 dark:bg-rose-500/20',    label: '空头' },
     'Research Manager':     { Icon: Brain,         iconCls: 'text-indigo-500',  bgCls: 'bg-indigo-100 dark:bg-indigo-500/20', label: '研究总监' },
@@ -370,6 +372,7 @@ export default function ChatCopilotPanel({ onSymbolDetected, onShowReport, initi
                     }
 
                     const agentName = statusData.agent
+                    const agentLabel = AGENT_META_MAP[agentName]?.label || agentName
                     const horizon = statusData.horizon ? `(${statusData.horizon === 'short' ? '短线' : '中线'})` : ''
                     const msgId = `chat-agent-msg-${agentName}-${statusData.horizon || 'main'}-${Date.now()}`
 
@@ -380,7 +383,7 @@ export default function ChatCopilotPanel({ onSymbolDetected, onShowReport, initi
                         id: msgId,
                         role: 'assistant',
                         agent: agentName,
-                        content: `**${agentName}** ${horizon} 正在思考并撰写报告中...`,
+                        content: `**${agentLabel}** ${horizon} 正在思考并撰写报告中...`,
                         timestamp: new Date().toISOString()
                     })
                     pendingAgentMsgIdsRef.current.add(msgId); forceUpdate(n => n + 1)

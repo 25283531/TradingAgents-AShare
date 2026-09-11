@@ -14,6 +14,8 @@ import Login from './pages/Login'
 import Feedback from './pages/Feedback'
 import Sponsor from './pages/Sponsor'
 import Thanks from './pages/Thanks'
+import ShortReview from './pages/ShortReview'
+import SelfEvolution from './pages/SelfEvolution'
 import { useAuthStore } from './stores/authStore'
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -53,6 +55,8 @@ function App() {
                     <Route path="/tracking-board" element={<TrackingBoard />} />
                     <Route path="/analysis" element={<Analysis />} />
                     <Route path="/reports" element={<Reports />} />
+                    <Route path="/short-review" element={<ShortReview />} />
+                    <Route path="/self-evolution" element={<SelfEvolution />} />
                     <Route path="/portfolio" element={<Portfolio />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/feedback" element={<Feedback />} />

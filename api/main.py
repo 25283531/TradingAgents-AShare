@@ -2802,7 +2802,12 @@ def learning_status(current_user: UserDB = Depends(_require_api_user)) -> Dict[s
     """Return this user's persisted forecast hit rate and error categories."""
     from tradingagents.rules.learning_store import LearningStore
     path = os.getenv("TA_LEARNING_DB", "data/learning.db")
-    return LearningStore(path).snapshot(scope=str(current_user.id))
+    store = LearningStore(path)
+    scope = str(current_user.id)
+    result = store.snapshot(scope=scope)
+    result["pending"] = store.pending(scope=scope)
+    result["lessons"] = store.lessons(scope=scope)
+    return result
 
 
 # Simple in-memory rate limiter for version stats: {ip: last_timestamp}

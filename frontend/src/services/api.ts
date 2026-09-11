@@ -1,5 +1,18 @@
 import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, JobListResponse, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse, TradeBuyRequest, TradeSellRequest, TradeRecord, TradeSummaryResponse, PortfolioSummaryResponse } from '@/types'
 
+export interface LearningStatus {
+    predictions: number
+    resolved: number
+    directional_samples: number
+    directional_hits: number
+    directional_hit_rate: number | null
+    error_types: Record<string, number>
+    metric: string
+    pending: Array<{ id: number; symbol: string; trade_date: string; horizon: number; action: string; direction: number | null }>
+    lessons: Array<{ error_type: string; samples: number; guidance: string }>
+    policy: { id: number | null; weights: Record<string, number>; metrics: Record<string, unknown> }
+}
+
 export function getBaseUrl(): string {
     // 在开发环境使用相对路径，让 Vite 代理处理请求
     // 在生产环境使用相对路径，自动适配部署域名
@@ -91,6 +104,10 @@ class ApiService {
         if (startDate) params.append('start_date', startDate)
         if (endDate) params.append('end_date', endDate)
         return this.request<KlineResponse>(`/v1/market/kline?${params}`)
+    }
+
+    async getLearningStatus(): Promise<LearningStatus> {
+        return this.request<LearningStatus>('/v1/learning/status')
     }
 
     async chatCompletion(

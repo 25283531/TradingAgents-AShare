@@ -23,7 +23,7 @@ RUN mkdir -p /app/data
 # 先只装第三方依赖（利用 Docker 层缓存）
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --link-mode=copy
 
 # 拷贝后端源码
 COPY api/ ./api/
@@ -32,7 +32,7 @@ COPY scheduler/ ./scheduler/
 
 # 安装项目本身，避免 uv run 启动时重复安装
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --link-mode=copy
 
 # 拷贝在 Stage 1 中快速构建好的前端产物
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
@@ -49,4 +49,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # 启动命令
-CMD ["uv", "run", "--no-sync", "tradingagents-api"]
+CMD ["/app/.venv/bin/tradingagents-api"]

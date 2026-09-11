@@ -271,6 +271,10 @@ async def lifespan(app: FastAPI):
     # Start scheduled task loop
     _create_tracked_task(_scheduled_task_loop(), label="Scheduled task scheduler")
     _log("Scheduled task scheduler started.")
+    if os.getenv("TA_LEARNING_REVIEW_WORKER", "1").lower() not in {"0", "false", "off"}:
+        from tradingagents.rules.auto_review import review_loop
+        _create_tracked_task(review_loop(os.getenv("TA_LEARNING_DB", "data/learning.db")), label="Learning review worker")
+        _log("Learning review worker started (read-only, matured forecasts only).")
     
     yield
     _log("Shutting down: Cleaning up resources...")
@@ -1379,6 +1383,7 @@ def _build_result_payload(final_state: Dict[str, Any]) -> Dict[str, Any]:
         "analyst_traces": final_state.get("analyst_traces"),
         "investment_plan": final_state.get("investment_plan"),
         "trader_investment_plan": final_state.get("trader_investment_plan"),
+        "learning_result": final_state.get("learning_result"),
         "risk_feedback_state": final_state.get("risk_feedback_state"),
         "final_trade_decision": final_state.get("final_trade_decision"),
     }
@@ -2066,6 +2071,9 @@ async def _run_job_inner(
                     request_source=request_source,
                     user_intent=user_intent, horizon=horizon,
                 )
+                init_state["metadata"].update(
+                    learning_scope=user_id or "local", learning_run_key=f"{job_id}_{horizon}"
+                )
                 last_report: Dict[str, str] = {}
                 seen: Dict[str, bool] = {}   # 追踪哪些字段已出现过，避免重复事件
                 horizon_final = None
@@ -2173,6 +2181,7 @@ async def _run_job_inner(
                 "symbol": ticker,
                 "trade_date": request.trade_date,
                 "mode": "dual_horizon",
+                "learning_result": primary_r.get("learning_result", {}),
                 "user_intent": user_intent,
                 "short_term": short_r,
                 "medium_term": medium_r,
@@ -2272,6 +2281,9 @@ async def _run_job_inner(
                 user_context=user_context_payload,
                 selected_analysts=request.selected_analysts,
                 request_source=request_source,
+            )
+            init_state["metadata"].update(
+                learning_scope=user_id or "local", learning_run_key=job_id
             )
             args = graph.propagator.get_graph_args()
             
@@ -2417,6 +2429,7 @@ async def _run_job_inner(
                 selected_analysts=request.selected_analysts,
                 request_source=request_source,
                 thread_id=job_id,
+                learning_scope=user_id or "local",
             )
 
         if not final_state:
@@ -2782,6 +2795,14 @@ async def _stream_job_events(job_id: str):
 @app.get("/healthz")
 def healthz() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/v1/learning/status")
+def learning_status(current_user: UserDB = Depends(_require_api_user)) -> Dict[str, Any]:
+    """Return this user's persisted forecast hit rate and error categories."""
+    from tradingagents.rules.learning_store import LearningStore
+    path = os.getenv("TA_LEARNING_DB", "data/learning.db")
+    return LearningStore(path).snapshot(scope=str(current_user.id))
 
 
 # Simple in-memory rate limiter for version stats: {ip: last_timestamp}
@@ -4892,6 +4913,9 @@ async def trigger_scheduled_analysis_once(
         )
     )
     return AnalyzeResponse(job_id=job_id, status="pending", created_at=now)
+
+# Backward-compatible hook used by integrations and tests.
+_run_scheduled_analysis_once = _run_manual_trigger
 
 
 @app.patch("/v1/scheduled/{item_id}")

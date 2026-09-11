@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Callable
+import re
 from langgraph.graph import END, StateGraph, START
 
 from tradingagents.agents.utils.agent_states import AgentState
@@ -86,6 +87,7 @@ class WorkflowV2:
         risk_profile: str = "neutral",
         max_debate_rounds: int = 1,
         max_risk_discuss_rounds: int = 1,
+        learning_config=None,
     ):
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
@@ -100,17 +102,26 @@ class WorkflowV2:
         self.max_debate_rounds = max_debate_rounds
         self.max_risk_discuss_rounds = max_risk_discuss_rounds
         self.factories = _load_agent_factories()
+        from tradingagents.rules.runtime import LearningRuntime
+        self.learning = LearningRuntime(learning_config)
 
-    def setup_sequential_graph(self, selected_analysts: Optional[List[str]] = None):
+    def setup_sequential_graph(self, selected_analysts: Optional[List[str]] = None, checkpointer=None):
         workflow = StateGraph(AgentState)
 
-        core_analysts = [a for a in self.CORE_ANALYSTS if a in (selected_analysts or self.CORE_ANALYSTS)]
-        special_analysts = [a for a in self.SPECIAL_ANALYSTS if a in (selected_analysts or self.SPECIAL_ANALYSTS)]
+        # Stage 1 is an ordered evidence relay.  A manager must never run while
+        # one of its reports is still being generated.
+        ordered = self.CORE_ANALYSTS + self.SPECIAL_ANALYSTS
+        selected = selected_analysts if selected_analysts is not None else ordered
+        if not selected:
+            raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
+        analysts = [a for a in ordered if a in selected]
+        if not analysts:
+            raise ValueError("Trading Agents Graph Setup Error: selected analysts are unknown")
 
         analyst_nodes = {}
         tool_nodes_map = {}
 
-        for analyst_type in core_analysts:
+        for analyst_type in analysts:
             if analyst_type == "market":
                 analyst_nodes["market"] = self.factories["create_market_analyst"](
                     self.quick_thinking_llm, self.data_collector
@@ -146,18 +157,16 @@ class WorkflowV2:
                     self.quick_thinking_llm, self.data_collector
                 )
                 tool_nodes_map["social"] = self.tool_nodes.get("social", self.tool_nodes["news"])
-
-        for analyst_type in special_analysts:
-            if analyst_type == "sector_rotation":
+            elif analyst_type == "sector_rotation":
                 analyst_nodes["sector_rotation"] = self.factories["create_sector_rotation_analyst"](
                     self.quick_thinking_llm, self.data_collector
                 )
-                tool_nodes_map["sector_rotation"] = self.tool_nodes.get("macro", self.tool_nodes["news"])
+                tool_nodes_map["sector_rotation"] = self.tool_nodes.get("macro", self.tool_nodes.get("news"))
             elif analyst_type == "anti_quant_trap":
                 analyst_nodes["anti_quant_trap"] = self.factories["create_anti_quant_trap_analyst"](
                     self.quick_thinking_llm, self.data_collector
                 )
-                tool_nodes_map["anti_quant_trap"] = self.tool_nodes.get("smart_money", self.tool_nodes["market"])
+                tool_nodes_map["anti_quant_trap"] = self.tool_nodes.get("smart_money", self.tool_nodes.get("market"))
 
         bull_researcher_node = self.factories["create_bull_researcher"](
             self.quick_thinking_llm, self.bull_memory
@@ -182,11 +191,7 @@ class WorkflowV2:
             workflow.add_node(f"{display_name} Analyst", analyst_nodes[analyst_key])
             workflow.add_node(f"tools_{analyst_key}", tool_nodes_map[analyst_key])
 
-        for analyst_key in core_analysts:
-            display_name = self.ANALYST_DISPLAY_NAMES.get(analyst_key, analyst_key)
-            _add_analyst_node(workflow, analyst_key, display_name)
-
-        for analyst_key in special_analysts:
+        for analyst_key in analysts:
             display_name = self.ANALYST_DISPLAY_NAMES.get(analyst_key, analyst_key)
             _add_analyst_node(workflow, analyst_key, display_name)
 
@@ -199,61 +204,40 @@ class WorkflowV2:
         workflow.add_node("稳健风控", conservative_debator_node)
         workflow.add_node("组合经理", portfolio_manager_node)
 
-        core_analyst_display_names = [
-            f"{self.ANALYST_DISPLAY_NAMES.get(a, a)} Analyst" for a in core_analysts
-        ]
-
-        for analyst_node in core_analyst_display_names:
-            workflow.add_edge(START, analyst_node)
-
-        for analyst_key in core_analysts:
+        first_display = self.ANALYST_DISPLAY_NAMES[analysts[0]]
+        workflow.add_node("经验检索", self.learning.recall)
+        workflow.add_node("预测归档", self.learning.archive)
+        workflow.add_edge(START, "经验检索")
+        workflow.add_edge("经验检索", f"{first_display} Analyst")
+        workflow.add_edge("预测归档", END)
+        for index, analyst_key in enumerate(analysts):
             display_name = self.ANALYST_DISPLAY_NAMES.get(analyst_key, analyst_key)
             analyst_node = f"{display_name} Analyst"
             tool_node = f"tools_{analyst_key}"
+            done_node = f"{display_name} Analyst Done"
+            workflow.add_node(done_node, lambda _state: {})
             workflow.add_conditional_edges(
                 analyst_node,
                 self._create_analyst_tool_router(tool_node),
                 {
                     "continue": tool_node,
-                    "next": "多头",
+                    "next": done_node,
                 },
             )
             workflow.add_edge(tool_node, analyst_node)
-
-        special_analyst_display_names = [
-            f"{self.ANALYST_DISPLAY_NAMES.get(a, a)} Analyst" for a in special_analysts
-        ]
-        for analyst_node in special_analyst_display_names:
-            workflow.add_edge(START, analyst_node)
-
-        for analyst_key in special_analysts:
-            display_name = self.ANALYST_DISPLAY_NAMES.get(analyst_key, analyst_key)
-            analyst_node = f"{display_name} Analyst"
-            tool_node = f"tools_{analyst_key}"
-            workflow.add_conditional_edges(
-                analyst_node,
-                self._create_analyst_tool_router(tool_node),
-                {
-                    "continue": tool_node,
-                    "next": "研究总监",
-                },
-            )
-            workflow.add_edge(tool_node, analyst_node)
-
-        def all_core_analysts_completed(state: AgentState) -> str:
-            messages = state["messages"]
-            analyst_names = [self.ANALYST_DISPLAY_NAMES.get(a, a) for a in core_analysts]
-            completed_analysts = set()
-
-            for msg in messages:
-                content = getattr(msg, "content", "") or ""
-                for name in analyst_names:
-                    if f"{name}分析" in content or f"{name}报告" in content or name in content[:100]:
-                        completed_analysts.add(name)
-
-            if len(completed_analysts) >= len(core_analysts):
-                return "bull"
-            return "wait"
+            next_node = (f"{self.ANALYST_DISPLAY_NAMES[analysts[index + 1]]} Analyst"
+                         if index + 1 < len(analysts) else "多头")
+            if analyst_key in {"market", "volume_price", "anti_quant_trap"}:
+                gate_node = f"熔断检查_{analyst_key}"
+                workflow.add_node(gate_node, self._create_circuit_breaker_gate(analyst_key))
+                workflow.add_edge(done_node, gate_node)
+                workflow.add_conditional_edges(gate_node, self._circuit_breaker_route,
+                                               {"continue": next_node, "reject": "预测归档"})
+                continue
+            if index + 1 < len(analysts):
+                workflow.add_edge(done_node, f"{self.ANALYST_DISPLAY_NAMES[analysts[index + 1]]} Analyst")
+            else:
+                workflow.add_edge(done_node, "多头")
 
         workflow.add_conditional_edges(
             "多头",
@@ -278,25 +262,25 @@ class WorkflowV2:
             self._create_research_manager_router(),
             {
                 "trader": "交易员",
-                "reject": END,
+                "reject": "预测归档",
             },
         )
 
         workflow.add_edge("交易员", "激进风控")
-        workflow.add_edge("交易员", "中性风控")
-        workflow.add_edge("交易员", "稳健风控")
+        workflow.add_conditional_edges("激进风控", self._create_risk_router("aggressive"),
+                                       {"conservative": "稳健风控", "judge": "组合经理", "aggressive": "激进风控"})
+        workflow.add_conditional_edges("稳健风控", self._create_risk_router("conservative"),
+                                       {"neutral": "中性风控", "judge": "组合经理", "aggressive": "激进风控"})
+        workflow.add_conditional_edges("中性风控", self._create_risk_router("neutral"),
+                                       {"aggressive": "激进风控", "judge": "组合经理", "conservative": "稳健风控"})
+        workflow.add_conditional_edges("组合经理", self._create_risk_judge_router,
+                                       {"trader": "交易员", "end": "预测归档"})
 
-        workflow.add_edge("激进风控", "组合经理")
-        workflow.add_edge("中性风控", "组合经理")
-        workflow.add_edge("稳健风控", "组合经理")
-
-        workflow.add_edge("组合经理", END)
-
-        return workflow.compile()
+        return workflow.compile(checkpointer=checkpointer)
 
     def _create_analyst_tool_router(self, tool_node: str) -> Callable:
         def router(state: AgentState):
-            messages = state["messages"]
+            messages = state.get("messages", [])
             if not messages:
                 return "next"
             last_message = messages[-1]
@@ -323,14 +307,14 @@ class WorkflowV2:
 
     def _create_research_manager_router(self) -> Callable:
         def router(state: AgentState):
-            messages = state["messages"]
-            if not messages:
+            if (state.get("circuit_breaker") or {}).get("triggered"):
+                return "reject"
+            content = state.get("investment_plan", "")
+            if not content:
                 return "reject"
 
-            last_message = messages[-1]
-            content = getattr(last_message, "content", "") or ""
-
-            if "REJECT" in content or "reject" in content.lower():
+            if ("该股投资逻辑不成立" in content or
+                    re.search(r"(?:最终裁定|熔断结论|决策)\s*[:：]\s*(?:reject|拒绝|剔除)", content, re.I)):
                 state["circuit_breaker"] = {
                     "triggered": True,
                     "reason": "研究总监裁定逻辑不成立",
@@ -341,3 +325,39 @@ class WorkflowV2:
             return "trader"
 
         return router
+
+    def _create_risk_router(self, speaker: str) -> Callable:
+        """Advance risk debate in Aggressive → Conservative → Neutral order."""
+        def router(state: AgentState):
+            debate = state.get("risk_debate_state", {})
+            if int(debate.get("count", 0) or 0) >= 3 * self.max_risk_discuss_rounds:
+                return "judge"
+            return {"aggressive": "conservative", "conservative": "neutral", "neutral": "aggressive"}[speaker]
+        return router
+
+    @staticmethod
+    def _create_risk_judge_router(state: AgentState) -> str:
+        feedback = state.get("risk_feedback_state", {}) or {}
+        verdict = str(feedback.get("latest_risk_verdict", "")).lower()
+        retries = int(feedback.get("retry_count", 0) or 0)
+        max_retries = int(feedback.get("max_retries", 1))
+        return "trader" if verdict == "revise" and retries <= max_retries else "end"
+
+    @staticmethod
+    def _circuit_breaker_route(state: AgentState) -> str:
+        return "reject" if (state.get("circuit_breaker") or {}).get("triggered") else "continue"
+
+    @staticmethod
+    def _create_circuit_breaker_gate(analyst_key: str) -> Callable:
+        report_keys = {
+            "market": ("market_report", r"空头下跌通道已确认", "技术面确认空头下跌通道"),
+            "volume_price": ("volume_price_report", r"派发阶段已确认", "量价分析确认派发阶段"),
+            "anti_quant_trap": ("anti_quant_report", r"风险等级\s*[：:]\s*高|高量化陷阱风险|建议直接剔除", "量化陷阱风险等级为高"),
+        }
+        report_key, pattern, reason = report_keys[analyst_key]
+        def gate(state: AgentState):
+            report = str(state.get(report_key, "") or "")
+            if re.search(pattern, report, flags=re.IGNORECASE):
+                return {"circuit_breaker": {"triggered": True, "reason": reason, "analyst": analyst_key}}
+            return {"circuit_breaker": {"triggered": False}}
+        return gate

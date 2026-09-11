@@ -47,6 +47,7 @@ from .workflow_v2 import WorkflowV2
 from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
+from tradingagents.rules import normalize_action, write_daily_reports
 
 
 class TradingAgentsGraph:
@@ -140,10 +141,13 @@ class TradingAgentsGraph:
                 self.risk_manager_memory,
                 data_collector=self.data_collector,
                 risk_profile=self.config.get("risk_profile", "neutral"),
+                learning_config=self.config,
                 max_debate_rounds=self.config.get("max_debate_rounds", 1),
                 max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
             )
-            self.graph = self.workflow_v2.setup_sequential_graph(selected_analysts)
+            self.graph = self.workflow_v2.setup_sequential_graph(
+                selected_analysts, checkpointer=self.checkpointer
+            )
         else:
             self.graph_setup = GraphSetup(
                 self.quick_thinking_llm,
@@ -257,6 +261,7 @@ class TradingAgentsGraph:
         selected_analysts: Optional[List[str]] = None,
         request_source: str = "api",
         thread_id: Optional[str] = None,
+        learning_scope: str = "local",
     ):
         """Run the trading agents graph for a company on a specific date."""
 
@@ -270,6 +275,9 @@ class TradingAgentsGraph:
             selected_analysts=selected_analysts,
             request_source=request_source,
         )
+        init_agent_state["metadata"]["learning_scope"] = learning_scope
+        if thread_id:
+            init_agent_state["metadata"]["learning_run_key"] = thread_id
         args = self.propagator.get_graph_args()
 
         # Use thread_id for checkpointer
@@ -343,6 +351,8 @@ class TradingAgentsGraph:
         state = self.propagator.create_initial_state(
             ticker, trade_date, user_intent=user_intent, horizon="short"
         )
+        from uuid import uuid4
+        graph_args["config"]["configurable"] = {"thread_id": str(uuid4())}
         final_state = await self.graph.ainvoke(state, **graph_args)
 
         # Evict cached data to free memory
@@ -362,6 +372,7 @@ class TradingAgentsGraph:
         """Extract a compact result dict from a completed graph state."""
         return {
             "horizon": horizon,
+            "learning_result": final_state.get("learning_result", {}),
             "company_of_interest": final_state.get("company_of_interest", ""),
             "trade_date": final_state.get("trade_date", ""),
             "final_trade_decision": final_state.get("final_trade_decision", ""),
@@ -499,3 +510,20 @@ class TradingAgentsGraph:
     def process_signal(self, full_signal):
         """Process a signal to extract the core decision."""
         return self.signal_processor.process_signal(full_signal)
+
+    def process_short_action(self, full_signal, *, risk_veto: bool = False,
+                             trigger_confirmed: bool = False, score: float | None = None) -> str:
+        """Normalize an LLM signal to the four-rule short-term action vocabulary."""
+        return normalize_action(
+            self.process_signal(full_signal), risk_veto=risk_veto,
+            trigger_confirmed=trigger_confirmed, score=score,
+        )
+
+    def write_daily_report(self, trade_date: str, state: Optional[Dict[str, Any]] = None,
+                           *, candidates=None, data_timestamp: Optional[str] = None) -> Path:
+        """Persist the ordered evidence relay as Markdown and an audit record."""
+        source = state or self.curr_state or {}
+        return write_daily_reports(
+            trade_date, source, root=self.config.get("daily_report_root", "trading/daily"),
+            candidates=candidates, data_timestamp=data_timestamp,
+        )

@@ -159,6 +159,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv-test/
 env/
 venv/
 ENV/
@@ -230,6 +231,9 @@ __marimo__/
 eval_results/
 reports/
 results/
+data/learning.db*
+trading/daily/
+trading/hermes-reference.md
 
 # Private dirs (not open-source for now)
 deploy/

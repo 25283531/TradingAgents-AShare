@@ -204,6 +204,15 @@ direction 只可填：看多 / 偏多 / 中性 / 偏空 / 看空（数据有方�
 行业轮动报告：
 {sector_report}
 
+技术面报告：
+{market_report}
+
+基本面报告：
+{fundamentals_report}
+
+新闻报告：
+{news_report}
+
 防量化陷阱报告：
 {anti_quant_report}
 

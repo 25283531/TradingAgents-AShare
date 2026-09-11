@@ -220,6 +220,8 @@ class RiskFeedbackState(TypedDict):
 
 
 class AgentState(MessagesState):
+    learning_context: Annotated[str, "Scoped prior-session experience"]
+    learning_result: Annotated[dict, "Persistent forecast id and deterministic factor score"]
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
     sender: Annotated[str, "Agent that sent this message"]

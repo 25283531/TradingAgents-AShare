@@ -3,6 +3,7 @@ import time
 
 from tradingagents.dataflows.config import get_config
 from tradingagents.prompts import get_prompt
+from tradingagents.rules.runtime import learning_instruction
 from tradingagents.agents.utils.agent_states import current_tracker_var
 from tradingagents.agents.utils.debate_utils import (
     format_claim_subset_for_prompt,
@@ -43,6 +44,9 @@ def create_research_manager(llm, memory):
         prompt = get_prompt("research_manager_prompt", config=get_config()).format(
             past_memory_str=past_memory_str,
             history=history,
+            market_report=market_research_report,
+            fundamentals_report=fundamentals_report,
+            news_report=news_report,
             smart_money_report=smart_money_report,
             volume_price_report=volume_price_report,
             sector_report=sector_report,
@@ -52,6 +56,8 @@ def create_research_manager(llm, memory):
             unresolved_claims_text=unresolved_claims_text,
             round_summary=round_summary_text,
         )
+
+        prompt += learning_instruction(state)
 
         _logger.info(
             "[research_manager] prompt size: total=%d chars | "
@@ -103,6 +109,8 @@ def create_research_manager(llm, memory):
 
         total_elapsed = time.monotonic() - start
         reasoning_text = "".join(reasoning_buf)
+        prompt += learning_instruction(state)
+
         _logger.info(
             "[research_manager] streaming done: total_elapsed=%.2fs | "
             "ttft_reasoning=%.2fs ttft_content=%.2fs | "

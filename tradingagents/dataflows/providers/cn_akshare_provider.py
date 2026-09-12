@@ -282,6 +282,29 @@ class CnAkshareProvider(BaseMarketDataProvider):
         cols = min(max_cols, len(df.columns))
         return df.head(rows).iloc[:, :cols]
 
+    @staticmethod
+    def _normalize_flow_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """统一不同 AkShare 版本/来源的资金流与龙虎榜列名。"""
+        if df is None or df.empty:
+            return df
+        aliases = {
+            "日期": "date", "交易日期": "date", "上榜日期": "date",
+            "代码": "symbol", "股票代码": "symbol", "证券代码": "symbol",
+            "名称": "name", "股票名称": "name", "证券简称": "name",
+            "主力净流入-净额": "main_net_inflow", "主力净流入": "main_net_inflow",
+            "今日主力净流入-净额": "main_net_inflow", "净流入": "net_inflow",
+            "净流入额": "net_inflow", "主力净流入净额": "main_net_inflow",
+            "买入金额": "buy_amount", "买入额": "buy_amount",
+            "卖出金额": "sell_amount", "卖出额": "sell_amount",
+            "净额": "net_amount", "龙虎榜类型": "lhb_type", "上榜原因": "reason",
+            "营业部名称": "broker", "买方营业部": "broker_buy", "卖方营业部": "broker_sell",
+        }
+        out = df.rename(columns={k: v for k, v in aliases.items() if k in df.columns}).copy()
+        for c in ("main_net_inflow", "net_inflow", "buy_amount", "sell_amount", "net_amount"):
+            if c in out.columns:
+                out[c] = pd.to_numeric(out[c].astype(str).str.replace(",", ""), errors="coerce")
+        return out
+
     def _fetch_hist_df(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         with AKSHARE_CALL_LOCK:
             ak = self._ak()
@@ -993,7 +1016,12 @@ class CnAkshareProvider(BaseMarketDataProvider):
     def _get_individual_fund_flow_primary(self, ak, code: str) -> pd.DataFrame | None:
         """Source 1: 原 stock_individual_fund_flow 接口。"""
         market = "sh" if code[:1] in ("5", "6", "9") else "sz"
-        df = ak.stock_individual_fund_flow(stock=code, market=market)
+        fn = getattr(ak, "stock_individual_fund_flow", None)
+        if fn is None: return None
+        try:
+            df = fn(stock=code, market=market)
+        except TypeError:
+            df = fn(stock=code)
         if df is not None and not df.empty:
             return df
         return None
@@ -1066,7 +1094,7 @@ class CnAkshareProvider(BaseMarketDataProvider):
                         df = fetcher(ak, code)
                     if df is not None and not df.empty:
                         # 尽量取近 5 条记录
-                        df_recent = df.tail(5)
+                        df_recent = self._normalize_flow_columns(df.tail(5))
                         return f"{symbol} 近5日主力资金净流向（来源：{name}）：\n{df_recent.to_string(index=False)}"
                 except Exception as exc:
                     last_err = exc
@@ -1079,21 +1107,32 @@ class CnAkshareProvider(BaseMarketDataProvider):
 
     def _get_board_fund_flow_primary(self, ak) -> pd.DataFrame | None:
         """Source 1: 原 stock_board_industry_fund_flow_em 接口。"""
-        df = ak.stock_board_industry_fund_flow_em(symbol="今日")
+        fn = getattr(ak, "stock_board_industry_fund_flow_em", None)
+        if fn is None: return None
+        try:
+            df = fn(symbol="今日")
+        except TypeError:
+            df = fn()
         if df is not None and not df.empty:
             return df
         return None
 
     def _get_board_fund_flow_sector(self, ak) -> pd.DataFrame | None:
         """Source 2: 板块资金流排名。"""
-        df = ak.stock_sector_fund_flow_rank(indicator="今日")
+        fn = getattr(ak, "stock_sector_fund_flow_rank", None)
+        if fn is None: return None
+        try: df = fn(indicator="今日")
+        except TypeError: df = fn()
         if df is not None and not df.empty:
             return df
         return None
 
     def _get_board_fund_flow_concept(self, ak) -> pd.DataFrame | None:
         """Source 3: 概念板块资金流向。"""
-        df = ak.stock_board_concept_fund_flow_em(symbol="今日")
+        fn = getattr(ak, "stock_board_concept_fund_flow_em", None)
+        if fn is None: return None
+        try: df = fn(symbol="今日")
+        except TypeError: df = fn()
         if df is not None and not df.empty:
             return df
         return None
@@ -1127,6 +1166,7 @@ class CnAkshareProvider(BaseMarketDataProvider):
                             df_sorted = df.sort_values(sort_col, ascending=False).reset_index(drop=True)
                         else:
                             df_sorted = df.reset_index(drop=True)
+                        df_sorted = self._normalize_flow_columns(df_sorted)
                         df_sorted.insert(0, "排名", range(1, len(df_sorted) + 1))
                         total = len(df_sorted)
                         result = df_sorted.head(10).to_string(index=False)
@@ -1156,7 +1196,8 @@ class CnAkshareProvider(BaseMarketDataProvider):
                     with AKSHARE_CALL_LOCK:
                         df = fetch()
                     if df is not None and not df.empty:
-                        return f"{symbol} 龙虎榜明细（{date}，来源：{name}）：\n{df.head(20).to_string(index=False)}"
+                        normalized = self._normalize_flow_columns(df.head(20))
+                        return f"{symbol} 龙虎榜明细（{date}，来源：{name}）：\n{normalized.to_string(index=False)}"
                 except Exception as exc:
                     errors.append(f"{name}:{type(exc).__name__}")
             if errors:

@@ -1039,6 +1039,14 @@ class CnAkshareProvider(BaseMarketDataProvider):
             return df
         return None
 
+    def _get_individual_fund_flow_main_rank(self, ak, code: str) -> pd.DataFrame | None:
+        """备用：东财主力资金排名接口（部分版本仅提供排名快照）。"""
+        fn = getattr(ak, "stock_main_fund_flow", None)
+        if fn is None:
+            return None
+        df = fn(symbol=code)
+        return df if df is not None and not df.empty else None
+
     def get_individual_fund_flow(self, symbol: str) -> str:
         """获取个股近期主力资金净流向（多数据来源自动兜底）。"""
         try:
@@ -1049,6 +1057,7 @@ class CnAkshareProvider(BaseMarketDataProvider):
                 ("stock_fund_flow_individual", self._get_individual_fund_flow_ths),
                 ("stock_individual_fund_flow_rank", self._get_individual_fund_flow_rank),
                 ("stock_individual_fund_flow_xq", self._get_individual_fund_flow_xq),
+                ("stock_main_fund_flow", self._get_individual_fund_flow_main_rank),
             ]
             last_err = None
             for name, fetcher in sources:
@@ -1136,11 +1145,23 @@ class CnAkshareProvider(BaseMarketDataProvider):
         try:
             ak = self._ak()
             code = self._normalize_symbol(symbol)
-            with AKSHARE_CALL_LOCK:
-                df = ak.stock_lhb_detail_em(symbol=code, start_date=date, end_date=date)
-            if df is None or df.empty:
-                return f"{symbol} 在 {date} 无龙虎榜数据（非异动日属正常）。"
-            return f"{symbol} 龙虎榜明细（{date}）：\n{df.head(20).to_string(index=False)}"
+            sources = [
+                ("stock_lhb_detail_em", lambda: ak.stock_lhb_detail_em(symbol=code, start_date=date, end_date=date)),
+                ("stock_lhb_stock_detail_em", lambda: ak.stock_lhb_stock_detail_em(symbol=code, date=date)),
+                ("stock_lhb_yyb_detail_em", lambda: ak.stock_lhb_yyb_detail_em(symbol=code, date=date)),
+            ]
+            errors = []
+            for name, fetch in sources:
+                try:
+                    with AKSHARE_CALL_LOCK:
+                        df = fetch()
+                    if df is not None and not df.empty:
+                        return f"{symbol} 龙虎榜明细（{date}，来源：{name}）：\n{df.head(20).to_string(index=False)}"
+                except Exception as exc:
+                    errors.append(f"{name}:{type(exc).__name__}")
+            if errors:
+                return f"{symbol} 龙虎榜数据暂不可用，已尝试 {','.join(errors)}；非异动日也可能无记录。"
+            return f"{symbol} 在 {date} 无龙虎榜数据（非异动日属正常）。"
         except Exception as exc:
             return f"龙虎榜数据获取失败：{type(exc).__name__}: {exc}"
 

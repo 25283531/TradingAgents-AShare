@@ -147,6 +147,13 @@ def route_to_vendor(method: str, *args, **kwargs):
 
         try:
             result = impl_func(*args, **kwargs)
+            # Some legacy providers return a human-readable unavailable message
+            # instead of raising. Treat that as a soft miss for market-data
+            # methods so the next free provider can be tried.
+            if method in {"get_individual_fund_flow", "get_board_fund_flow", "get_lhb_detail", "get_stock_data", "get_indicators"} and isinstance(result, str):
+                unavailable = ("暂不可用", "调用失败", "获取失败", "No data found", "数据不可用")
+                if any(token in result for token in unavailable):
+                    raise RuntimeError(result[:240])
             _trace(f"method={method} {args_summary} vendor={vendor} status=hit")
             return result
         except (AlphaVantageRateLimitError, NotImplementedError) as exc:

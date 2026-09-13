@@ -1018,22 +1018,34 @@ class CnAkshareProvider(BaseMarketDataProvider):
         market = "sh" if code[:1] in ("5", "6", "9") else "sz"
         fn = getattr(ak, "stock_individual_fund_flow", None)
         if fn is None: return None
-        try:
-            df = fn(stock=code, market=market)
-        except TypeError:
-            df = fn(stock=code)
-        if df is not None and not df.empty:
-            return df
+        # AkShare has changed this endpoint's parameter names several times.
+        # Try the known variants before falling through to other providers.
+        attempts = (
+            {"stock": code, "market": market},
+            {"stock": code},
+            {"symbol": code},
+        )
+        for kwargs in attempts:
+            try:
+                df = fn(**kwargs)
+                if df is not None and not df.empty:
+                    return df
+            except (TypeError, KeyError, ValueError):
+                continue
         return None
 
     def _get_individual_fund_flow_ths(self, ak, code: str) -> pd.DataFrame | None:
         """Source 2: 同花顺数据中心-个股资金流向。"""
-        df = ak.stock_fund_flow_individual(symbol=code)
-        if df is not None and not df.empty:
-            # 同花顺接口返回的列名可能不同，尽量标准化
-            df = df.copy()
-            # 如果包含日期列则保留，否则尝试构造近 N 行
-            return df
+        fn = getattr(ak, "stock_fund_flow_individual", None)
+        if fn is None:
+            return None
+        for kwargs in ({"symbol": code}, {"stock": code}):
+            try:
+                df = fn(**kwargs)
+                if df is not None and not df.empty:
+                    return df.copy()
+            except (TypeError, KeyError, ValueError):
+                continue
         return None
 
     def _get_individual_fund_flow_rank(self, ak, code: str) -> pd.DataFrame | None:
@@ -1078,27 +1090,36 @@ class CnAkshareProvider(BaseMarketDataProvider):
     def get_individual_fund_flow(self, symbol: str) -> str:
         """获取个股近期主力资金净流向（多数据来源自动兜底）。"""
         try:
-            ak = self._ak()
             code = self._normalize_symbol(symbol)
-            sources = [
-                ("stock_individual_fund_flow", self._get_individual_fund_flow_primary),
-                ("stock_fund_flow_individual", self._get_individual_fund_flow_ths),
-                ("stock_individual_fund_flow_rank", self._get_individual_fund_flow_rank),
-                ("stock_individual_fund_flow_xq", self._get_individual_fund_flow_xq),
-                ("stock_main_fund_flow", self._get_individual_fund_flow_main_rank),
-            ]
             last_err = None
-            for name, fetcher in sources:
-                try:
-                    with AKSHARE_CALL_LOCK:
-                        df = fetcher(ak, code)
-                    if df is not None and not df.empty:
-                        # 尽量取近 5 条记录
-                        df_recent = self._normalize_flow_columns(df.tail(5))
-                        return f"{symbol} 近5日主力资金净流向（来源：{name}）：\n{df_recent.to_string(index=False)}"
-                except Exception as exc:
-                    last_err = exc
-                    continue
+            try:
+                ak = self._ak()
+                sources = [
+                    ("stock_individual_fund_flow", self._get_individual_fund_flow_primary),
+                    ("stock_fund_flow_individual", self._get_individual_fund_flow_ths),
+                    ("stock_individual_fund_flow_rank", self._get_individual_fund_flow_rank),
+                    ("stock_individual_fund_flow_xq", self._get_individual_fund_flow_xq),
+                    ("stock_main_fund_flow", self._get_individual_fund_flow_main_rank),
+                ]
+                for name, fetcher in sources:
+                    try:
+                        with AKSHARE_CALL_LOCK:
+                            df = fetcher(ak, code)
+                        if df is not None and not df.empty:
+                            df_recent = self._normalize_flow_columns(df.tail(5))
+                            return f"{symbol} 近5日主力资金净流向（来源：{name}）：\n{df_recent.to_string(index=False)}"
+                    except Exception as exc:
+                        last_err = exc
+            except Exception as exc:
+                last_err = exc
+
+            # AkShare 上游接口经常变更，直接读取东方财富公开历史接口作为无密钥兜底。
+            try:
+                df = self._get_individual_fund_flow_eastmoney(code)
+                if df is not None and not df.empty:
+                    return f"{symbol} 近5日主力资金净流向（来源：eastmoney_push2his）：\n{df.tail(5).to_string(index=False)}"
+            except Exception as exc:
+                last_err = exc
             if last_err is not None:
                 return f"{symbol} 近期主力资金流向数据暂不可用。所有来源均失败：{type(last_err).__name__}"
             return f"{symbol} 近期主力资金流向数据暂不可用。"
@@ -1116,6 +1137,33 @@ class CnAkshareProvider(BaseMarketDataProvider):
         if df is not None and not df.empty:
             return df
         return None
+
+    def _get_individual_fund_flow_eastmoney(self, code: str) -> pd.DataFrame | None:
+        """东方财富公开 push2his 接口；无需 API Key，作为 AkShare 之外的兜底。"""
+        import requests
+        import json
+        market = "1" if code.startswith(("5", "6", "9")) else "0"
+        url = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+        params = {
+            "lmt": "30", "klt": "101", "secid": f"{market}.{code}",
+            "fields1": "f1", "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63",
+        }
+        response = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+        response.raise_for_status()
+        payload = response.json()
+        klines = (((payload.get("data") or {}).get("klines")) or [])
+        rows = []
+        for item in klines:
+            values = str(item).split(",")
+            if len(values) < 10:
+                continue
+            rows.append({
+                "date": values[0], "close": values[1], "change_pct": values[2],
+                "main_net_inflow": values[3], "main_net_inflow_pct": values[4],
+                "super_large_net": values[5], "large_net": values[7],
+                "medium_net": values[9], "small_net": values[11] if len(values) > 11 else None,
+            })
+        return self._normalize_flow_columns(pd.DataFrame(rows)) if rows else None
 
     def _get_board_fund_flow_sector(self, ak) -> pd.DataFrame | None:
         """Source 2: 板块资金流排名。"""
@@ -1140,45 +1188,56 @@ class CnAkshareProvider(BaseMarketDataProvider):
     def get_board_fund_flow(self) -> str:
         """获取行业板块资金流向排名（多数据来源自动兜底）。"""
         try:
-            ak = self._ak()
             sources = [
                 ("stock_board_industry_fund_flow_em", self._get_board_fund_flow_primary),
                 ("stock_sector_fund_flow_rank", self._get_board_fund_flow_sector),
                 ("stock_board_concept_fund_flow_em", self._get_board_fund_flow_concept),
             ]
             last_err = None
-            for name, fetcher in sources:
-                try:
-                    with AKSHARE_CALL_LOCK:
-                        df = fetcher(ak)
-                    if df is not None and not df.empty:
-                        # 兼容不同列名进行排序
-                        sort_candidates = [
-                            "今日主力净流入-净额", "主力净流入-净额", "主力净流入",
-                            "净流入", "净流入额", "今日净流入", "主力净流入(亿)",
-                        ]
-                        sort_col = None
-                        for c in sort_candidates:
-                            if c in df.columns:
-                                sort_col = c
-                                break
-                        if sort_col is not None:
-                            df_sorted = df.sort_values(sort_col, ascending=False).reset_index(drop=True)
-                        else:
-                            df_sorted = df.reset_index(drop=True)
-                        df_sorted = self._normalize_flow_columns(df_sorted)
-                        df_sorted.insert(0, "排名", range(1, len(df_sorted) + 1))
-                        total = len(df_sorted)
-                        result = df_sorted.head(10).to_string(index=False)
-                        return f"板块资金流向排名（来源：{name}，共{total}个板块，前10名）：\n{result}"
-                except Exception as exc:
-                    last_err = exc
-                    continue
+            try:
+                ak = self._ak()
+                for name, fetcher in sources:
+                    try:
+                        with AKSHARE_CALL_LOCK:
+                            df = fetcher(ak)
+                        if df is not None and not df.empty:
+                            return self._format_board_flow(df, name)
+                    except Exception as exc:
+                        last_err = exc
+            except Exception as exc:
+                last_err = exc
+            try:
+                df = self._get_board_fund_flow_eastmoney()
+                if df is not None and not df.empty:
+                    return self._format_board_flow(df, "eastmoney_push2")
+            except Exception as exc:
+                last_err = exc
             if last_err is not None:
                 return f"今日板块资金流向数据暂不可用。所有来源均失败：{type(last_err).__name__}"
             return "今日板块资金流向数据暂不可用。"
         except Exception as exc:
             return f"板块资金流向数据获取失败：{type(exc).__name__}: {exc}"
+
+    def _format_board_flow(self, df: pd.DataFrame, name: str) -> str:
+        if df is None or df.empty:
+            return "今日板块资金流向数据暂不可用。"
+        sort_candidates = ["今日主力净流入-净额", "主力净流入-净额", "主力净流入", "净流入", "净流入额", "今日净流入", "main_net_inflow"]
+        sort_col = next((c for c in sort_candidates if c in df.columns), None)
+        df_sorted = df.sort_values(sort_col, ascending=False).reset_index(drop=True) if sort_col else df.reset_index(drop=True)
+        df_sorted = self._normalize_flow_columns(df_sorted)
+        df_sorted.insert(0, "排名", range(1, len(df_sorted) + 1))
+        return f"板块资金流向排名（来源：{name}，共{len(df_sorted)}个板块，前10名）：\n{df_sorted.head(10).to_string(index=False)}"
+
+    def _get_board_fund_flow_eastmoney(self) -> pd.DataFrame | None:
+        import requests
+        url = "https://push2.eastmoney.com/api/qt/clist/get"
+        params = {"pn": "1", "pz": "100", "po": "1", "np": "1", "fid": "f62", "fs": "m:90+t:2", "fields": "f12,f14,f3,f62,f184"}
+        response = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+        response.raise_for_status()
+        diff = (((response.json().get("data") or {}).get("diff")) or [])
+        if isinstance(diff, dict):
+            diff = list(diff.values())
+        return pd.DataFrame(diff) if diff else None
 
     def get_lhb_detail(self, symbol: str, date: str) -> str:
         """获取龙虎榜数据，非异动日返回空提示（属正常）。"""
@@ -1186,9 +1245,11 @@ class CnAkshareProvider(BaseMarketDataProvider):
             ak = self._ak()
             code = self._normalize_symbol(symbol)
             sources = [
-                ("stock_lhb_detail_em", lambda: ak.stock_lhb_detail_em(symbol=code, start_date=date, end_date=date)),
-                ("stock_lhb_stock_detail_em", lambda: ak.stock_lhb_stock_detail_em(symbol=code, date=date)),
-                ("stock_lhb_yyb_detail_em", lambda: ak.stock_lhb_yyb_detail_em(symbol=code, date=date)),
+                # detail_em is a market-wide date query in recent AkShare;
+                # filter the returned table by symbol afterwards.
+                ("stock_lhb_detail_em", lambda: ak.stock_lhb_detail_em(start_date=date.replace('-', ''), end_date=date.replace('-', ''))),
+                ("stock_lhb_stock_detail_em", lambda: ak.stock_lhb_stock_detail_em(symbol=code, date=date.replace('-', ''))),
+                ("stock_lhb_yyb_detail_em", lambda: ak.stock_lhb_yyb_detail_em(symbol=code, date=date.replace('-', ''))),
             ]
             errors = []
             for name, fetch in sources:
@@ -1196,6 +1257,13 @@ class CnAkshareProvider(BaseMarketDataProvider):
                     with AKSHARE_CALL_LOCK:
                         df = fetch()
                     if df is not None and not df.empty:
+                        # Market-wide endpoint requires local symbol filtering.
+                        for col in ("代码", "股票代码", "证券代码", "symbol"):
+                            if col in df.columns:
+                                mask = df[col].astype(str).str.extract(r"(\d{6})", expand=False) == code
+                                if mask.any():
+                                    df = df[mask]
+                                break
                         normalized = self._normalize_flow_columns(df.head(20))
                         return f"{symbol} 龙虎榜明细（{date}，来源：{name}）：\n{normalized.to_string(index=False)}"
                 except Exception as exc:

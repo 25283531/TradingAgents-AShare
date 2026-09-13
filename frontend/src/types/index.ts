@@ -633,6 +633,12 @@ export interface RuntimeConfig {
     llm_provider: string
     deep_think_llm: string
     quick_think_llm: string
+    debate_llm?: string
+    judge_llm?: string
+    fallback_model?: string
+    auto_escalate_llm?: boolean
+    llm_timeout?: number
+    llm_max_retries?: number
     backend_url: string
     max_debate_rounds: number
     max_risk_discuss_rounds: number
@@ -664,6 +670,12 @@ export interface RuntimeConfigUpdate {
     llm_provider?: string
     deep_think_llm?: string
     quick_think_llm?: string
+    debate_llm?: string
+    judge_llm?: string
+    fallback_model?: string
+    auto_escalate_llm?: boolean
+    llm_timeout?: number
+    llm_max_retries?: number
     backend_url?: string
     max_debate_rounds?: number
     max_risk_discuss_rounds?: number

@@ -160,6 +160,13 @@ def _ensure_user_schema() -> None:
                 conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN min_pe INTEGER DEFAULT 0"))
             if "risk_profile" not in llm_columns:
                 conn.execute(text("ALTER TABLE user_llm_configs ADD COLUMN risk_profile VARCHAR(20) DEFAULT 'neutral'"))
+            for name, ddl in {
+                "fallback_model": "VARCHAR(255)", "llm_timeout": "INTEGER DEFAULT 300",
+                "llm_max_retries": "INTEGER DEFAULT 2", "debate_llm": "VARCHAR(255)", "judge_llm": "VARCHAR(255)",
+                "auto_escalate_llm": "BOOLEAN DEFAULT 0",
+            }.items():
+                if name not in llm_columns:
+                    conn.execute(text(f"ALTER TABLE user_llm_configs ADD COLUMN {name} {ddl}"))
     except Exception as e:
         logger.error("Failed to ensure user schema: %s", e)
 
@@ -380,6 +387,12 @@ class UserLLMConfigDB(Base):
     backend_url = Column(String(500), nullable=True)
     quick_think_llm = Column(String(255), nullable=True)
     deep_think_llm = Column(String(255), nullable=True)
+    fallback_model = Column(String(255), nullable=True)
+    llm_timeout = Column(Integer, default=300)
+    llm_max_retries = Column(Integer, default=2)
+    debate_llm = Column(String(255), nullable=True)
+    judge_llm = Column(String(255), nullable=True)
+    auto_escalate_llm = Column(Boolean, default=False)
     max_debate_rounds = Column(Integer, nullable=True)
     max_risk_discuss_rounds = Column(Integer, nullable=True)
     api_key_encrypted = Column(Text, nullable=True)

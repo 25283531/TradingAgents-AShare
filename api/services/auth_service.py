@@ -248,6 +248,12 @@ def upsert_user_llm_config(
     backend_url: Optional[str] = None,
     quick_think_llm: Optional[str] = None,
     deep_think_llm: Optional[str] = None,
+    debate_llm: Optional[str] = None,
+    judge_llm: Optional[str] = None,
+    fallback_model: Optional[str] = None,
+    llm_timeout: Optional[int] = None,
+    llm_max_retries: Optional[int] = None,
+    auto_escalate_llm: Optional[bool] = None,
     max_debate_rounds: Optional[int] = None,
     max_risk_discuss_rounds: Optional[int] = None,
     api_key: Optional[str] = None,
@@ -277,6 +283,9 @@ def upsert_user_llm_config(
         row.quick_think_llm = quick_think_llm
     if deep_think_llm is not None:
         row.deep_think_llm = deep_think_llm
+    for key, value in (("debate_llm", debate_llm), ("judge_llm", judge_llm), ("fallback_model", fallback_model), ("llm_timeout", llm_timeout), ("llm_max_retries", llm_max_retries), ("auto_escalate_llm", auto_escalate_llm)):
+        if value is not None:
+            setattr(row, key, value)
     if max_debate_rounds is not None:
         row.max_debate_rounds = max_debate_rounds
     if max_risk_discuss_rounds is not None:

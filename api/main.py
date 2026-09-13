@@ -72,6 +72,34 @@ from tradingagents.agents.utils.context_utils import USER_CONTEXT_KEYS, normaliz
 from tradingagents.agents.utils.agent_states import current_tracker_var
 
 
+def humanize_error(value: Any) -> str:
+    """将内部异常转换为用户可理解的中文摘要，同时避免泄露堆栈。"""
+    text = str(value or "").strip()
+    if not text:
+        return "任务执行失败，未返回具体原因"
+    low = text.lower()
+    if "nonetype" in low or low.endswith(": none"):
+        return "数据源返回为空，分析未能完成"
+    if "timeout" in low or "timed out" in low:
+        return "数据源请求超时，请稍后重试"
+    if "connection" in low or "tls handshake" in low:
+        return "数据源连接失败，请检查网络后重试"
+    if "no available vendor" in low or "all data sources failed" in low:
+        return "所有可用数据源均无法返回结果"
+    if "fund flow" in low or "资金" in text:
+        return "资金流向数据获取失败"
+    if "龙虎榜" in text or "lhb" in low:
+        return "龙虎榜数据获取失败"
+    if "stock data" in low or "行情" in text:
+        return "行情数据获取失败"
+    if "horizon analysis failed" in low:
+        return "分析阶段失败，请稍后重试"
+    # 去除常见异常类名及多余堆栈，仅保留首行
+    first = text.splitlines()[0].strip()
+    first = re.sub(r"^(RuntimeError|ValueError|Exception|TypeError)\s*:\s*", "", first)
+    return first[:240] or "任务执行失败，请稍后重试"
+
+
 def _cors_allow_origins() -> list[str]:
     raw = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
     default_origins = [
@@ -999,6 +1027,12 @@ class UserRuntimeConfigResponse(BaseModel):
     llm_provider: str
     deep_think_llm: str
     quick_think_llm: str
+    debate_llm: Optional[str] = None
+    judge_llm: Optional[str] = None
+    fallback_model: Optional[str] = None
+    auto_escalate_llm: bool = False
+    llm_timeout: int = 300
+    llm_max_retries: int = 2
     backend_url: str
     max_debate_rounds: int
     max_risk_discuss_rounds: int
@@ -1022,6 +1056,12 @@ class UserRuntimeConfigUpdateRequest(BaseModel):
     llm_provider: Optional[str] = None
     deep_think_llm: Optional[str] = None
     quick_think_llm: Optional[str] = None
+    debate_llm: Optional[str] = None
+    judge_llm: Optional[str] = None
+    fallback_model: Optional[str] = None
+    auto_escalate_llm: Optional[bool] = None
+    llm_timeout: Optional[int] = None
+    llm_max_retries: Optional[int] = None
     backend_url: Optional[str] = None
     max_debate_rounds: Optional[int] = None
     max_risk_discuss_rounds: Optional[int] = None
@@ -1152,6 +1192,7 @@ def _user_config_overrides(user_id: Optional[str], db: Optional[Session] = None)
             "min_avg_volume",
             "min_pe",
             "risk_profile",
+            "debate_llm", "judge_llm", "fallback_model", "llm_timeout", "llm_max_retries", "auto_escalate_llm",
         ):
             value = getattr(user_cfg, key, None)
             if value is not None:
@@ -2169,7 +2210,7 @@ async def _run_job_inner(
                 if isinstance(r, Exception):
                     tb = "".join(traceback.format_exception(type(r), r, r.__traceback__))
                     _log(f"Horizon '{request.horizons[i]}' failed: {r!r}\n{tb}")
-                    horizon_errors.append(f"{request.horizons[i]}: {r}")
+                    horizon_errors.append(f"{request.horizons[i]}: {humanize_error(r) or '大模型服务响应超时，请稍后重试或切换备用模型'}")
             if horizon_errors:
                 raise RuntimeError(f"Horizon analysis failed: {'; '.join(horizon_errors)}")
 
@@ -2525,7 +2566,8 @@ async def _run_job_inner(
         _log(f"Job completed successfully: {job_id}")
         _log(f"[Timer] TOTAL Job execution (single_horizon) took {time.time() - job_start_t:.2f}s")
     except Exception as exc:
-        err_msg = f"{type(exc).__name__}: {exc}"
+        logger.exception("Analysis job failed: %s", job_id)
+        err_msg = humanize_error(exc)
         _set_job(
             job_id,
             status="failed",
@@ -2538,7 +2580,7 @@ async def _run_job_inner(
         try:
             def _record_failure():
                 with get_db_ctx() as err_db:
-                    report_service.mark_report_failed(err_db, job_id, f"{err_msg}\n\n{traceback.format_exc()}")
+                    report_service.mark_report_failed(err_db, job_id, err_msg)
             await asyncio.to_thread(_record_failure)
         except Exception as db_exc:
             _log(f"Failed to record failure in DB: {db_exc}")
@@ -3118,7 +3160,36 @@ def list_jobs(
     current_user: UserDB = Depends(_require_api_user),
 ) -> JobListResponse:
     """获取当前用户的所有任务列表"""
-    all_jobs = get_job_store().list_jobs(user_id=current_user.id)
+    # job_store 是进程内状态；SQLite 报告是持久状态。合并两者，确保
+    # 容器重启、后台 worker 或多进程执行时控制台仍能看到任务。
+    all_jobs_by_id: Dict[str, Dict[str, Any]] = {
+        str(job.get("job_id")): dict(job)
+        for job in get_job_store().list_jobs(user_id=current_user.id)
+        if job.get("job_id")
+    }
+    try:
+        with get_db_ctx() as db:
+            reports = report_service.get_reports_by_user(db, user_id=current_user.id, skip=0, limit=1000)
+            for report in reports:
+                report_id = str(getattr(report, "id", "") or "")
+                if not report_id or report_id in all_jobs_by_id:
+                    continue
+                created_at = getattr(report, "created_at", None)
+                updated_at = getattr(report, "updated_at", None)
+                all_jobs_by_id[report_id] = {
+                    "job_id": report_id,
+                    "user_id": current_user.id,
+                    "status": str(getattr(report, "status", None) or "completed"),
+                    "created_at": created_at.isoformat() if created_at else "",
+                    "started_at": updated_at.isoformat() if updated_at and str(getattr(report, "status", "")) in ("running", "pending") else None,
+                    "finished_at": updated_at.isoformat() if updated_at and str(getattr(report, "status", "")) in ("completed", "failed") else None,
+                    "symbol": getattr(report, "symbol", "") or "",
+                    "trade_date": getattr(report, "trade_date", "") or "",
+                    "error": humanize_error(getattr(report, "error", None)) if getattr(report, "error", None) else None,
+                }
+    except Exception:
+        logger.exception("Failed to merge persisted reports into job list")
+    all_jobs = list(all_jobs_by_id.values())
     if status:
         all_jobs = [j for j in all_jobs if j.get("status") == status]
     all_jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
@@ -3783,6 +3854,7 @@ def delete_backtest(job_id: str) -> Dict:
 
 _CONFIG_ALLOWED_KEYS = {
     "llm_provider", "deep_think_llm", "quick_think_llm",
+    "debate_llm", "judge_llm", "fallback_model", "llm_timeout", "llm_max_retries", "auto_escalate_llm",
     "backend_url", "max_debate_rounds", "max_risk_discuss_rounds",
     "job_timeout", "stagger_delay", "batch_concurrency",
 }
@@ -3790,7 +3862,10 @@ _CONFIG_PREFERENCE_KEYS = {"email_report_enabled", "wecom_report_enabled"}
 _CONFIG_MODEL_KEYS = ("llm_provider", "backend_url", "quick_think_llm", "deep_think_llm")
 _CONFIG_MODEL_LABELS = {
     "quick_think_llm": "常规模型",
+    "debate_llm": "多空辩论模型",
     "deep_think_llm": "推理模型",
+    "judge_llm": "投资委员会 / 裁决模型",
+    "fallback_model": "备用模型",
 }
 _CONFIG_PROBE_TIMEOUT_SECONDS = 12.0
 _CONFIG_PROBE_PROMPT = "Reply with the single word OK."
@@ -3826,7 +3901,7 @@ def _mask_wecom_webhook(webhook_url: Optional[str]) -> Optional[str]:
 def _warmup_model_names(config: Dict[str, Any]) -> List[str]:
     seen: set[str] = set()
     models: List[str] = []
-    for key in ("quick_think_llm", "deep_think_llm"):
+    for key in ("quick_think_llm", "debate_llm", "deep_think_llm", "judge_llm", "fallback_model"):
         value = str(config.get(key) or "").strip()
         if not value or value in seen:
             continue
@@ -3837,7 +3912,7 @@ def _warmup_model_names(config: Dict[str, Any]) -> List[str]:
 
 def _warmup_model_targets(config: Dict[str, Any]) -> List[Tuple[str, List[str]]]:
     targets: Dict[str, List[str]] = {}
-    for key in ("quick_think_llm", "deep_think_llm"):
+    for key in ("quick_think_llm", "debate_llm", "deep_think_llm", "judge_llm", "fallback_model"):
         model = str(config.get(key) or "").strip()
         if not model:
             continue
@@ -4028,6 +4103,12 @@ def _config_response_for_user(user: Optional[UserDB], db: Session) -> UserRuntim
         llm_provider=cfg["llm_provider"],
         deep_think_llm=cfg["deep_think_llm"],
         quick_think_llm=cfg["quick_think_llm"],
+        debate_llm=getattr(user_cfg, "debate_llm", None) if user_cfg else None,
+        judge_llm=getattr(user_cfg, "judge_llm", None) if user_cfg else None,
+        fallback_model=getattr(user_cfg, "fallback_model", None) if user_cfg else None,
+        auto_escalate_llm=bool(getattr(user_cfg, "auto_escalate_llm", False)) if user_cfg else False,
+        llm_timeout=getattr(user_cfg, "llm_timeout", 300) if user_cfg else 300,
+        llm_max_retries=getattr(user_cfg, "llm_max_retries", 2) if user_cfg else 2,
         backend_url=cfg["backend_url"],
         max_debate_rounds=cfg["max_debate_rounds"],
         max_risk_discuss_rounds=cfg["max_risk_discuss_rounds"],
@@ -4113,6 +4194,12 @@ def update_runtime_config(
         llm_provider=updates.llm_provider,
         deep_think_llm=updates.deep_think_llm,
         quick_think_llm=updates.quick_think_llm,
+        debate_llm=updates.debate_llm,
+        judge_llm=updates.judge_llm,
+        fallback_model=updates.fallback_model,
+        auto_escalate_llm=updates.auto_escalate_llm,
+        llm_timeout=updates.llm_timeout,
+        llm_max_retries=updates.llm_max_retries,
         backend_url=updates.backend_url,
         max_debate_rounds=updates.max_debate_rounds,
         max_risk_discuss_rounds=updates.max_risk_discuss_rounds,

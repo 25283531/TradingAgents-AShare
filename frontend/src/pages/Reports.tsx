@@ -11,6 +11,19 @@ import KeyMetrics from '@/components/KeyMetrics'
 import { useAuthStore } from '@/stores/authStore'
 import { advanceProgress, getReportRunProgress } from '@/utils/progressFeedback'
 
+const humanizeError = (value?: string | null) => {
+    if (!value) return '任务执行失败，未返回具体原因'
+    const text = value.trim(), low = text.toLowerCase()
+    if (low.includes('nonetype') || low.endsWith(': none')) return '数据源返回为空，分析未能完成'
+    if (low.includes('timeout') || low.includes('timed out')) return '数据源请求超时，请稍后重试'
+    if (low.includes('connection') || low.includes('tls handshake')) return '数据源连接失败，请检查网络后重试'
+    if (low.includes('no available vendor') || low.includes('all data sources failed')) return '所有可用数据源均无法返回结果'
+    if (low.includes('fund flow') || text.includes('资金')) return '资金流向数据获取失败'
+    if (low.includes('lhb') || text.includes('龙虎榜')) return '龙虎榜数据获取失败'
+    if (low.includes('horizon analysis failed')) return '分析阶段失败，请稍后重试'
+    return text.replace(/^(RuntimeError|ValueError|Exception|TypeError)\s*:\s*/i, '').split('\n')[0].slice(0, 240)
+}
+
 type ProgressState = {
     status: 'idle' | 'loading' | 'success' | 'error'
     progress: number
@@ -513,7 +526,7 @@ export default function Reports() {
                             </div>
                             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">分析失败</h3>
                             <p className="mt-2 max-w-[240px] text-sm text-slate-500">
-                                {selectedReport.error?.slice(0, 80) || '未知错误'}
+                                {humanizeError(selectedReport.error)}
                             </p>
                         </div>
                     ) : (

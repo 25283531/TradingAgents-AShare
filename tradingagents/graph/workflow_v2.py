@@ -83,6 +83,8 @@ class WorkflowV2:
         trader_memory,
         invest_judge_memory,
         risk_manager_memory,
+        debate_llm=None,
+        judge_llm=None,
         data_collector=None,
         risk_profile: str = "neutral",
         max_debate_rounds: int = 1,
@@ -91,6 +93,8 @@ class WorkflowV2:
     ):
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
+        self.debate_llm = debate_llm or deep_thinking_llm
+        self.judge_llm = judge_llm or deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.bull_memory = bull_memory
         self.bear_memory = bear_memory
@@ -175,16 +179,16 @@ class WorkflowV2:
             self.quick_thinking_llm, self.bear_memory
         )
         research_manager_node = self.factories["create_research_manager"](
-            self.deep_thinking_llm, self.invest_judge_memory
+            self.judge_llm, self.invest_judge_memory
         )
         trader_node = self.factories["create_trader"](self.quick_thinking_llm, self.trader_memory)
 
-        aggressive_debator_node = self.factories["create_aggressive_debator"](self.quick_thinking_llm)
-        neutral_debator_node = self.factories["create_neutral_debator"](self.quick_thinking_llm)
-        conservative_debator_node = self.factories["create_conservative_debator"](self.quick_thinking_llm)
+        aggressive_debator_node = self.factories["create_aggressive_debator"](self.debate_llm)
+        neutral_debator_node = self.factories["create_neutral_debator"](self.debate_llm)
+        conservative_debator_node = self.factories["create_conservative_debator"](self.debate_llm)
 
         portfolio_manager_node = self.factories["create_risk_manager"](
-            self.deep_thinking_llm, self.risk_manager_memory
+            self.judge_llm, self.risk_manager_memory
         )
 
         def _add_analyst_node(workflow: StateGraph, analyst_key: str, display_name: str):

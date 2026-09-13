@@ -11,6 +11,12 @@ DEFAULT_CONFIG = {
     "llm_provider": os.getenv("TA_LLM_PROVIDER", "openai"),
     "deep_think_llm": os.getenv("TA_LLM_DEEP", "gpt-4o"),
     "quick_think_llm": os.getenv("TA_LLM_QUICK", "gpt-4o-mini"),
+    "debate_llm": os.getenv("TA_LLM_DEBATE", ""),
+    "judge_llm": os.getenv("TA_LLM_JUDGE", ""),
+    "fallback_model": os.getenv("TA_LLM_FALLBACK", ""),
+    "auto_escalate_llm": os.getenv("TA_LLM_AUTO_ESCALATE", "0").lower() in ("1", "true", "yes", "on"),
+    "llm_timeout": int(os.getenv("TA_LLM_TIMEOUT", "300")),
+    "llm_max_retries": int(os.getenv("TA_LLM_MAX_RETRIES", "2")),
     "backend_url": os.getenv("TA_BASE_URL", "https://api.openai.com/v1"),
     "api_key": os.getenv("TA_API_KEY", ""),
     
@@ -37,6 +43,7 @@ DEFAULT_CONFIG = {
         "fundamental_data": "cn_akshare,cn_baostock,yfinance",
         "news_data": "cn_akshare,cn_baostock,yfinance",
         "realtime_data": "cn_akshare",
+        "cn_market_data": "cn_akshare,cn_baostock",
     },
     "tool_vendors": {},
 }

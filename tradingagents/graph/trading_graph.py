@@ -50,6 +50,43 @@ from .signal_processing import SignalProcessor
 from tradingagents.rules import normalize_action, write_daily_reports
 
 
+class _EscalatingLLM:
+    """Retry an LLM call with the configured next-level model on timeout/error."""
+    def __init__(self, primary, fallback=None, enabled=False, label=""):
+        self.primary, self.fallback, self.enabled, self.label = primary, fallback, enabled, label
+
+    def __getattr__(self, name):
+        return getattr(self.primary, name)
+
+    def invoke(self, *args, **kwargs):
+        try:
+            return self.primary.invoke(*args, **kwargs)
+        except Exception:
+            if self.enabled and self.fallback is not None:
+                return self.fallback.invoke(*args, **kwargs)
+            raise
+
+    async def ainvoke(self, *args, **kwargs):
+        try:
+            return await self.primary.ainvoke(*args, **kwargs)
+        except Exception:
+            if self.enabled and self.fallback is not None:
+                return await self.fallback.ainvoke(*args, **kwargs)
+            raise
+
+    async def astream(self, *args, **kwargs):
+        emitted = False
+        try:
+            async for chunk in self.primary.astream(*args, **kwargs):
+                emitted = True
+                yield chunk
+        except Exception:
+            if not self.enabled or emitted or self.fallback is None:
+                raise
+            async for chunk in self.fallback.astream(*args, **kwargs):
+                yield chunk
+
+
 class TradingAgentsGraph:
     """Main class that orchestrates the trading agents framework."""
 
@@ -100,9 +137,21 @@ class TradingAgentsGraph:
             base_url=self.config.get("backend_url"),
             **llm_kwargs,
         )
+        debate_client = create_llm_client(provider=self.config["llm_provider"], model=self.config.get("debate_llm") or self.config["deep_think_llm"], base_url=self.config.get("backend_url"), **llm_kwargs)
+        judge_client = create_llm_client(provider=self.config["llm_provider"], model=self.config.get("judge_llm") or self.config["deep_think_llm"], base_url=self.config.get("backend_url"), **llm_kwargs)
+        fallback_name = str(self.config.get("fallback_model") or "").strip()
+        fallback_client = create_llm_client(provider=self.config["llm_provider"], model=fallback_name, base_url=self.config.get("backend_url"), **llm_kwargs) if fallback_name else None
 
-        self.deep_thinking_llm = deep_client.get_llm()
-        self.quick_thinking_llm = quick_client.get_llm()
+        deep_raw = deep_client.get_llm()
+        quick_raw = quick_client.get_llm()
+        debate_raw = debate_client.get_llm()
+        judge_raw = judge_client.get_llm()
+        fallback_raw = fallback_client.get_llm() if fallback_client else None
+        escalate = bool(self.config.get("auto_escalate_llm", False))
+        self.judge_llm = _EscalatingLLM(judge_raw, fallback_raw, escalate, "judge")
+        self.debate_llm = _EscalatingLLM(debate_raw, self.judge_llm, escalate, "debate")
+        self.quick_thinking_llm = _EscalatingLLM(quick_raw, self.debate_llm, escalate, "quick")
+        self.deep_thinking_llm = _EscalatingLLM(deep_raw, self.judge_llm, escalate, "deep")
         
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
@@ -144,6 +193,8 @@ class TradingAgentsGraph:
                 learning_config=self.config,
                 max_debate_rounds=self.config.get("max_debate_rounds", 1),
                 max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
+                debate_llm=self.debate_llm,
+                judge_llm=self.judge_llm,
             )
             self.graph = self.workflow_v2.setup_sequential_graph(
                 selected_analysts, checkpointer=self.checkpointer
@@ -170,7 +221,10 @@ class TradingAgentsGraph:
 
     def _get_provider_kwargs(self) -> Dict[str, Any]:
         """Get provider-specific kwargs for LLM client creation."""
-        kwargs = {}
+        kwargs = {
+            "timeout": float(self.config.get("llm_timeout", 300) or 300),
+            "max_retries": int(self.config.get("llm_max_retries", 2) or 0),
+        }
         provider = self.config.get("llm_provider", "").lower()
 
         if provider == "google":

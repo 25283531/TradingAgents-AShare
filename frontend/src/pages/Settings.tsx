@@ -53,6 +53,12 @@ export default function Settings() {
     const [customBaseUrl, setCustomBaseUrl] = useState('')
     const [deepThinkLlm, setDeepThinkLlm] = useState('')
     const [quickThinkLlm, setQuickThinkLlm] = useState('')
+    const [debateLlm, setDebateLlm] = useState('')
+    const [judgeLlm, setJudgeLlm] = useState('')
+    const [fallbackModel, setFallbackModel] = useState('')
+    const [autoEscalateLlm, setAutoEscalateLlm] = useState(false)
+    const [llmTimeout, setLlmTimeout] = useState(300)
+    const [llmMaxRetries, setLlmMaxRetries] = useState(2)
     const [maxDebateRounds, setMaxDebateRounds] = useState(1)
     const [maxRiskRounds, setMaxRiskRounds] = useState(1)
     const [jobTimeout, setJobTimeout] = useState(1800)  // 任务超时时间（秒）
@@ -129,6 +135,12 @@ export default function Settings() {
                 setCustomBaseUrl(cfg.backend_url || '')
                 setDeepThinkLlm(cfg.deep_think_llm)
                 setQuickThinkLlm(cfg.quick_think_llm)
+                setDebateLlm(cfg.debate_llm || cfg.deep_think_llm)
+                setJudgeLlm(cfg.judge_llm || cfg.deep_think_llm)
+                setFallbackModel(cfg.fallback_model || '')
+                setAutoEscalateLlm(!!cfg.auto_escalate_llm)
+                setLlmTimeout(cfg.llm_timeout || 300)
+                setLlmMaxRetries(cfg.llm_max_retries ?? 2)
                 setMaxDebateRounds(cfg.max_debate_rounds)
                 setMaxRiskRounds(cfg.max_risk_discuss_rounds)
                 setJobTimeout(cfg.job_timeout || 1800)
@@ -216,6 +228,12 @@ export default function Settings() {
         backend_url: effectiveBaseUrl || undefined,
         deep_think_llm: deepThinkLlm,
         quick_think_llm: quickThinkLlm,
+        debate_llm: debateLlm,
+        judge_llm: judgeLlm,
+        fallback_model: fallbackModel || undefined,
+        auto_escalate_llm: autoEscalateLlm,
+        llm_timeout: llmTimeout,
+        llm_max_retries: llmMaxRetries,
         max_debate_rounds: maxDebateRounds,
         max_risk_discuss_rounds: maxRiskRounds,
         job_timeout: jobTimeout,
@@ -379,6 +397,27 @@ export default function Settings() {
                                 <option key={preset.id} value={preset.id}>{preset.label}</option>
                             ))}
                         </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">多空辩论模型</label>
+                        <input type="text" value={debateLlm} onChange={e => setDebateLlm(e.target.value)} className="input w-full" placeholder="留空使用推理模型" disabled={configLoading} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">投资委员会 / 裁决模型</label>
+                        <input type="text" value={judgeLlm} onChange={e => setJudgeLlm(e.target.value)} className="input w-full" placeholder="留空使用推理模型" disabled={configLoading} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">备用模型</label>
+                        <input type="text" value={fallbackModel} onChange={e => setFallbackModel(e.target.value)} className="input w-full" placeholder="主模型超时后切换" disabled={configLoading} />
+                    </div>
+                    <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                        <input type="checkbox" checked={autoEscalateLlm} onChange={e => setAutoEscalateLlm(e.target.checked)} disabled={configLoading} />
+                        低级别模型超时后自动切换到高级别模型（轻量→辩论→裁决）
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <label className="text-sm text-slate-600">LLM 超时（秒）<input type="number" min={30} max={3600} value={llmTimeout} onChange={e => setLlmTimeout(Number(e.target.value))} className="input mt-2 w-full" /></label>
+                        <label className="text-sm text-slate-600">LLM 重试次数<input type="number" min={0} max={5} value={llmMaxRetries} onChange={e => setLlmMaxRetries(Number(e.target.value))} className="input mt-2 w-full" /></label>
                     </div>
 
                     <div>

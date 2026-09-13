@@ -3859,11 +3859,10 @@ _CONFIG_ALLOWED_KEYS = {
     "job_timeout", "stagger_delay", "batch_concurrency",
 }
 _CONFIG_PREFERENCE_KEYS = {"email_report_enabled", "wecom_report_enabled"}
-_CONFIG_MODEL_KEYS = ("llm_provider", "backend_url", "quick_think_llm", "deep_think_llm")
+_CONFIG_MODEL_KEYS = ("llm_provider", "backend_url", "quick_think_llm", "debate_llm", "judge_llm")
 _CONFIG_MODEL_LABELS = {
-    "quick_think_llm": "常规模型",
+    "quick_think_llm": "轻量模型",
     "debate_llm": "多空辩论模型",
-    "deep_think_llm": "推理模型",
     "judge_llm": "投资委员会 / 裁决模型",
     "fallback_model": "备用模型",
 }
@@ -3901,7 +3900,7 @@ def _mask_wecom_webhook(webhook_url: Optional[str]) -> Optional[str]:
 def _warmup_model_names(config: Dict[str, Any]) -> List[str]:
     seen: set[str] = set()
     models: List[str] = []
-    for key in ("quick_think_llm", "debate_llm", "deep_think_llm", "judge_llm", "fallback_model"):
+    for key in ("quick_think_llm", "debate_llm", "judge_llm", "fallback_model"):
         value = str(config.get(key) or "").strip()
         if not value or value in seen:
             continue
@@ -3912,7 +3911,7 @@ def _warmup_model_names(config: Dict[str, Any]) -> List[str]:
 
 def _warmup_model_targets(config: Dict[str, Any]) -> List[Tuple[str, List[str]]]:
     targets: Dict[str, List[str]] = {}
-    for key in ("quick_think_llm", "debate_llm", "deep_think_llm", "judge_llm", "fallback_model"):
+    for key in ("quick_think_llm", "debate_llm", "judge_llm", "fallback_model"):
         model = str(config.get(key) or "").strip()
         if not model:
             continue

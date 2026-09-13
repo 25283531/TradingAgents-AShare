@@ -51,7 +51,6 @@ export default function Settings() {
 
     const [providerPreset, setProviderPreset] = useState('openai')
     const [customBaseUrl, setCustomBaseUrl] = useState('')
-    const [deepThinkLlm, setDeepThinkLlm] = useState('')
     const [quickThinkLlm, setQuickThinkLlm] = useState('')
     const [debateLlm, setDebateLlm] = useState('')
     const [judgeLlm, setJudgeLlm] = useState('')
@@ -102,7 +101,7 @@ export default function Settings() {
     useEffect(() => {
         setWarmupResults([])
         setWarmupError(null)
-    }, [providerPreset, customBaseUrl, deepThinkLlm, quickThinkLlm, llmApiKey])
+    }, [providerPreset, customBaseUrl, quickThinkLlm, debateLlm, judgeLlm, llmApiKey])
 
     useEffect(() => {
         setWecomWarmupMessage(null)
@@ -133,7 +132,6 @@ export default function Settings() {
             .then(cfg => {
                 setProviderPreset(inferPreset(cfg.llm_provider, cfg.backend_url))
                 setCustomBaseUrl(cfg.backend_url || '')
-                setDeepThinkLlm(cfg.deep_think_llm)
                 setQuickThinkLlm(cfg.quick_think_llm)
                 setDebateLlm(cfg.debate_llm || cfg.deep_think_llm)
                 setJudgeLlm(cfg.judge_llm || cfg.deep_think_llm)
@@ -226,7 +224,8 @@ export default function Settings() {
     const buildRuntimeConfigPayload = (options?: { includeEmail?: boolean; includeWecom?: boolean }) => ({
         llm_provider: effectiveProvider,
         backend_url: effectiveBaseUrl || undefined,
-        deep_think_llm: deepThinkLlm,
+        // 后端仍接收旧字段用于兼容；当前工作流的最高级模型是裁决模型。
+        deep_think_llm: judgeLlm || debateLlm || quickThinkLlm,
         quick_think_llm: quickThinkLlm,
         debate_llm: debateLlm,
         judge_llm: judgeLlm,
@@ -383,7 +382,7 @@ export default function Settings() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                    <div className="order-1">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                             模型厂商
                         </label>
@@ -399,28 +398,28 @@ export default function Settings() {
                         </select>
                     </div>
 
-                    <div>
+                    <div className="order-5">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">多空辩论模型</label>
-                        <input type="text" value={debateLlm} onChange={e => setDebateLlm(e.target.value)} className="input w-full" placeholder="留空使用推理模型" disabled={configLoading} />
+                        <input type="text" value={debateLlm} onChange={e => setDebateLlm(e.target.value)} className="input w-full" placeholder="留空使用默认模型" disabled={configLoading} />
                     </div>
-                    <div>
+                    <div className="order-6">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">投资委员会 / 裁决模型</label>
-                        <input type="text" value={judgeLlm} onChange={e => setJudgeLlm(e.target.value)} className="input w-full" placeholder="留空使用推理模型" disabled={configLoading} />
+                        <input type="text" value={judgeLlm} onChange={e => setJudgeLlm(e.target.value)} className="input w-full" placeholder="留空使用默认模型" disabled={configLoading} />
                     </div>
-                    <div>
+                    <div className="order-7">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">备用模型</label>
                         <input type="text" value={fallbackModel} onChange={e => setFallbackModel(e.target.value)} className="input w-full" placeholder="主模型超时后切换" disabled={configLoading} />
                     </div>
-                    <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <label className="order-9 md:col-span-2 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                         <input type="checkbox" checked={autoEscalateLlm} onChange={e => setAutoEscalateLlm(e.target.checked)} disabled={configLoading} />
                         低级别模型超时后自动切换到高级别模型（轻量→辩论→裁决）
                     </label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="order-10 grid grid-cols-2 gap-3">
                         <label className="text-sm text-slate-600">LLM 超时（秒）<input type="number" min={30} max={3600} value={llmTimeout} onChange={e => setLlmTimeout(Number(e.target.value))} className="input mt-2 w-full" /></label>
                         <label className="text-sm text-slate-600">LLM 重试次数<input type="number" min={0} max={5} value={llmMaxRetries} onChange={e => setLlmMaxRetries(Number(e.target.value))} className="input mt-2 w-full" /></label>
                     </div>
 
-                    <div>
+                    <div className="order-2">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                             接入协议
                         </label>
@@ -431,7 +430,7 @@ export default function Settings() {
                     </div>
 
                     {(selectedPreset.baseUrl || selectedPreset.editableBaseUrl) && (
-                        <div className="md:col-span-2">
+                        <div className="order-3 md:col-span-2">
                             <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                                 Base URL
                             </label>
@@ -451,9 +450,9 @@ export default function Settings() {
                         </div>
                     )}
 
-                    <div>
+                    <div className="order-4">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
-                            常规模型
+                            轻量模型
                             <span className="ml-1 text-xs text-slate-400 font-normal">用于意图识别、JSON 提取等轻量任务</span>
                         </label>
                         <input
@@ -466,22 +465,7 @@ export default function Settings() {
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
-                            推理模型
-                            <span className="ml-1 text-xs text-slate-400 font-normal">用于深度分析、辩论等复杂任务</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={deepThinkLlm}
-                            onChange={e => setDeepThinkLlm(e.target.value)}
-                            className="input w-full"
-                            placeholder="例如：gpt-4.1 / deepseek-reasoner / kimi-k2-0905-preview"
-                            disabled={configLoading}
-                        />
-                    </div>
-
-                    <div className="md:col-span-2">
+                    <div className="order-8 md:col-span-2">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                             用户模型 Key
                         </label>
@@ -519,10 +503,10 @@ export default function Settings() {
                         </p>
                     </div>
 
-                    <div className="md:col-span-2 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-900/40 p-4 space-y-3">
+                    <div className="order-11 md:col-span-2 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-900/40 p-4 space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">连通性测试</div>
+                                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">连通测试</div>
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                     使用当前表单配置向模型发送“你好”，不会自动保存设置。
                                 </p>
@@ -625,6 +609,7 @@ export default function Settings() {
                     <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                             风险讨论轮数上限
+                            <span className="ml-1 text-xs text-slate-400 font-normal">由多空辩论模型驱动，轮次结束后再由裁决模型裁定</span>
                         </label>
                         <input
                             type="number"

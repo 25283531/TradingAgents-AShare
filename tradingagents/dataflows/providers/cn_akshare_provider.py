@@ -1088,10 +1088,23 @@ class CnAkshareProvider(BaseMarketDataProvider):
         return df if df is not None and not df.empty else None
 
     def get_individual_fund_flow(self, symbol: str) -> str:
-        """获取个股近期主力资金净流向（多数据来源自动兜底）。"""
+        """获取个股近期主力资金净流向。
+
+        东方财富公开接口是当前验证可用且无需密钥的首选；AkShare
+        接口作为后备，避免其上游接口断开时阻塞主流程。
+        """
         try:
             code = self._normalize_symbol(symbol)
             last_err = None
+            # 先调用已验证可用的东方财富公开接口，避免 AkShare 失败时
+            # 反复等待多个不稳定的上游接口。
+            try:
+                df = self._get_individual_fund_flow_eastmoney(code)
+                if df is not None and not df.empty:
+                    return f"{symbol} 近5日主力资金净流向（来源：eastmoney_push2his）：\n{df.tail(5).to_string(index=False)}"
+            except Exception as exc:
+                last_err = exc
+                _lock_logger.warning("[fund-flow] eastmoney individual failed for %s: %s", code, exc)
             try:
                 ak = self._ak()
                 sources = [
@@ -1113,13 +1126,6 @@ class CnAkshareProvider(BaseMarketDataProvider):
             except Exception as exc:
                 last_err = exc
 
-            # AkShare 上游接口经常变更，直接读取东方财富公开历史接口作为无密钥兜底。
-            try:
-                df = self._get_individual_fund_flow_eastmoney(code)
-                if df is not None and not df.empty:
-                    return f"{symbol} 近5日主力资金净流向（来源：eastmoney_push2his）：\n{df.tail(5).to_string(index=False)}"
-            except Exception as exc:
-                last_err = exc
             if last_err is not None:
                 return f"{symbol} 近期主力资金流向数据暂不可用。所有来源均失败：{type(last_err).__name__}"
             return f"{symbol} 近期主力资金流向数据暂不可用。"
@@ -1186,14 +1192,22 @@ class CnAkshareProvider(BaseMarketDataProvider):
         return None
 
     def get_board_fund_flow(self) -> str:
-        """获取行业板块资金流向排名（多数据来源自动兜底）。"""
+        """获取行业板块资金流向排名（东方财富优先，AkShare 后备）。"""
         try:
+            last_err = None
+            # 东方财富公开板块接口在本机验证成功，优先使用。
+            try:
+                df = self._get_board_fund_flow_eastmoney()
+                if df is not None and not df.empty:
+                    return self._format_board_flow(df, "eastmoney_push2")
+            except Exception as exc:
+                last_err = exc
+                _lock_logger.warning("[fund-flow] eastmoney board failed: %s", exc)
             sources = [
                 ("stock_board_industry_fund_flow_em", self._get_board_fund_flow_primary),
                 ("stock_sector_fund_flow_rank", self._get_board_fund_flow_sector),
                 ("stock_board_concept_fund_flow_em", self._get_board_fund_flow_concept),
             ]
-            last_err = None
             try:
                 ak = self._ak()
                 for name, fetcher in sources:
@@ -1204,12 +1218,6 @@ class CnAkshareProvider(BaseMarketDataProvider):
                             return self._format_board_flow(df, name)
                     except Exception as exc:
                         last_err = exc
-            except Exception as exc:
-                last_err = exc
-            try:
-                df = self._get_board_fund_flow_eastmoney()
-                if df is not None and not df.empty:
-                    return self._format_board_flow(df, "eastmoney_push2")
             except Exception as exc:
                 last_err = exc
             if last_err is not None:

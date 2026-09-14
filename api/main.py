@@ -75,13 +75,19 @@ from tradingagents.agents.utils.agent_states import current_tracker_var
 def humanize_error(value: Any) -> str:
     """将内部异常转换为用户可理解的中文摘要，同时避免泄露堆栈。"""
     text = str(value or "").strip()
+    # httpx.ReadTimeout 等异常经常没有 message，不能退化成“无具体原因”。
+    error_type = type(value).__name__.lower() if value is not None else ""
     if not text:
+        if "timeout" in error_type or "timeoutexception" in error_type:
+            return "大模型流式响应超时，请切换模型或增加 LLM 超时时间"
+        if "connection" in error_type:
+            return "大模型服务连接失败，请检查网络或备用模型配置"
         return "任务执行失败，未返回具体原因"
     low = text.lower()
     if "nonetype" in low or low.endswith(": none"):
         return "数据源返回为空，分析未能完成"
     if "timeout" in low or "timed out" in low:
-        return "数据源请求超时，请稍后重试"
+        return "大模型或数据源请求超时，请切换模型或增加 LLM 超时时间"
     if "connection" in low or "tls handshake" in low:
         return "数据源连接失败，请检查网络后重试"
     if "no available vendor" in low or "all data sources failed" in low:

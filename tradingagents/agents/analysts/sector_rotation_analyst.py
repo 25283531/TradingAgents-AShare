@@ -51,11 +51,21 @@ def create_sector_rotation_analyst(llm, data_collector=None):
 
         tracker = current_tracker_var.get()
         full_content = ""
-        async for chunk in llm.astream(messages):
-            content = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_content += content
-            if tracker:
-                tracker._emit_token("Sector Rotation Analyst", "sector_report", content)
+        try:
+            async for chunk in llm.astream(messages):
+                content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                full_content += content
+                if tracker:
+                    tracker._emit_token("Sector Rotation Analyst", "sector_report", content)
+        except Exception as exc:
+            # 单个分析师超时不应终止整个 horizon；保留已生成内容并让
+            # 后续研究辩论/裁决继续执行。
+            error_name = type(exc).__name__.lower()
+            if "timeout" in error_name or "timed out" in str(exc).lower():
+                suffix = "板块轮动分析模型响应超时，请切换模型或增加LLM超时时间。"
+            else:
+                suffix = f"板块轮动分析暂时失败（{type(exc).__name__}）。"
+            full_content = (full_content + "\n\n" + suffix).strip()
 
         verdict, confidence = extract_verdict(full_content)
 

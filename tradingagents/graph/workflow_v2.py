@@ -192,7 +192,10 @@ class WorkflowV2:
         )
 
         def _add_analyst_node(workflow: StateGraph, analyst_key: str, display_name: str):
-            workflow.add_node(f"{display_name} Analyst", analyst_nodes[analyst_key])
+            workflow.add_node(
+                f"{display_name} Analyst",
+                self._safe_analyst_node(analyst_nodes[analyst_key], analyst_key),
+            )
             workflow.add_node(f"tools_{analyst_key}", tool_nodes_map[analyst_key])
 
         for analyst_key in analysts:
@@ -281,6 +284,41 @@ class WorkflowV2:
                                        {"trader": "交易员", "end": "预测归档"})
 
         return workflow.compile(checkpointer=checkpointer)
+
+    @staticmethod
+    def _safe_analyst_node(node: Callable, analyst_key: str) -> Callable:
+        """让单个分析师失败时跳过该模块并继续工作流。
+
+        LangGraph 默认会把节点异常传播到整个 graph，导致已经完成的报告
+        也被标记为失败。这里将异常转换为该分析师的可见报告，并返回空
+        messages，使 analyst router 直接进入下一个节点。
+        """
+        report_keys = {
+            "market": "market_report", "social": "sentiment_report",
+            "news": "news_report", "fundamentals": "fundamentals_report",
+            "macro": "macro_report", "smart_money": "smart_money_report",
+            "volume_price": "volume_price_report", "sector_rotation": "sector_report",
+            "anti_quant_trap": "anti_quant_report",
+        }
+        report_key = report_keys.get(analyst_key, f"{analyst_key}_report")
+
+        async def wrapped(state):
+            try:
+                return await node(state)
+            except Exception as exc:
+                name = type(exc).__name__.lower()
+                if "timeout" in name or "timed out" in str(exc).lower():
+                    reason = "模型响应超时，请切换模型或增加LLM超时时间"
+                elif "connection" in name or "connection" in str(exc).lower():
+                    reason = "模型服务连接失败，请检查网络或备用模型配置"
+                else:
+                    reason = f"模块执行失败（{type(exc).__name__}）"
+                return {
+                    report_key: f"{analyst_key}分析暂时不可用：{reason}。",
+                    "messages": [],
+                }
+
+        return wrapped
 
     def _create_analyst_tool_router(self, tool_node: str) -> Callable:
         def router(state: AgentState):
